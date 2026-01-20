@@ -1,0 +1,21 @@
+//
+// Created by kir on 23.11.2025.
+//
+
+#ifndef VISMUT_TYPE_H
+#define VISMUT_TYPE_H
+#include <stdint.h>
+#include "../types.h"
+
+typedef struct {
+    VValueType type;
+
+    union {
+        int64_t i64;
+        double f64;
+        wchar_t *wstr;
+    };
+} VValue;
+
+
+#endif //VISMUT_TYPE_H

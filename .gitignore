@@ -1,0 +1,7 @@
+.idea
+*.exe
+*.s
+code.c
+count_lines.py
+cmake-build-release
+cmake-build-debug

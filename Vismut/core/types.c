@@ -1,0 +1,27 @@
+#include "types.h"
+#define ELEMENT_VALUE_FOR_MAP_ARRAY_INIT(name, text) [name] = (text),
+
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+
+#define CREATE_MAP_TO_STRING_FUNCTION(ENUM_NAME, MAP_NAME, COUNT_NAME, UNKNOWN_NAME) \
+    attribute_const \
+    const wchar_t* ENUM_NAME##_String(const ENUM_NAME type) { \
+        static const wchar_t *names[] = { \
+            MAP_NAME(ELEMENT_VALUE_FOR_MAP_ARRAY_INIT) \
+        }; \
+        if (unlikely(type >= COUNT_NAME)) { \
+            return names[UNKNOWN_NAME]; \
+        } \
+        return names[type]; \
+    }
+
+CREATE_MAP_TO_STRING_FUNCTION(VTokenType, TOKENS_MAP, TOKEN_COUNT, TOKEN_UNKNOWN)
+
+CREATE_MAP_TO_STRING_FUNCTION(ASTNodeType, AST_NODES_MAP, AST_COUNT, AST_UNKNOWN)
+
+CREATE_MAP_TO_STRING_FUNCTION(ASTBinaryType, AST_BINARY_MAP, AST_BINARY_COUNT, AST_BINARY_UNKNOWN)
+
+CREATE_MAP_TO_STRING_FUNCTION(ASTUnaryType, AST_UNARY_MAP, AST_UNARY_COUNT, AST_UNARY_UNKNOWN)
+
+CREATE_MAP_TO_STRING_FUNCTION(VValueType, VALUE_TYPE_MAP, VALUE_TYPES_COUNT, VALUE_UNKNOWN)
