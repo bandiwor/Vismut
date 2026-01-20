@@ -27,7 +27,7 @@ static bool IsNodePure(const ASTNode *node) {
         case AST_TYPE_CAST:
             return node->type_cast.is_pure;
         case AST_FUNCTION_CALL:
-            return false
+            return false;
         default:
             return true;
     }
