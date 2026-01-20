@@ -5,6 +5,7 @@
 #ifndef VISMUT_CALLSTACK_H
 #define VISMUT_CALLSTACK_H
 #include "../debug.h"
+#include <stdint.h>
 
 #if DEBUG
 #define CALLSTACK_MAX_DEPTH 1024

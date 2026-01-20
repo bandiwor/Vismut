@@ -1,7 +1,6 @@
 #include "ansi_colors.h"
 
 // ansi_colors.c
-#include <wchar.h>
 #include <stdio.h>
 #include <Windows.h>
 

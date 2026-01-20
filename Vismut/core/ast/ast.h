@@ -18,12 +18,12 @@ typedef struct {
         VValue literal;
 
         struct {
-            const char *var_name;
+            const uint8_t *var_name;
             VValueType expr_type;
         } var_ref;
 
         struct {
-            const char *var_name;
+            const uint8_t *var_name;
             VValueType var_type;
             VValueType init_value_type;
             struct ASTNode *init_value;
@@ -71,7 +71,7 @@ typedef struct {
         struct {
             struct ASTNode *statements;
             struct ASTNode *functions;
-            const char *module_name;
+            const uint8_t *module_name;
             Scope *scope;
         } module;
 
@@ -93,7 +93,7 @@ void ASTNode_Print(const ASTNode *);
 
 ASTNode *CreateLiteralNode(Arena *arena, Position pos, VValue value);
 
-ASTNode *CreateVarRefNode(Arena *arena, Position pos, const char *var_name);
+ASTNode *CreateVarRefNode(Arena *arena, Position pos, const uint8_t *var_name);
 
 ASTNode *CreateBinaryNode(Arena *arena, Position pos, const ASTNode *left, const ASTNode *right,
                           ASTBinaryType op, bool is_pure);
@@ -104,7 +104,7 @@ ASTNode *CreateUnaryNode(Arena *arena, Position pos, const ASTNode *operand, AST
 ASTNode *CreateIfStatementNode(Arena *arena, Position pos, const ASTNode *condition,
                                const ASTNode *then_block, const ASTNode *else_block);
 
-ASTNode *CreateVarDeclarationNode(Arena *arena, Position pos, const char *var_name,
+ASTNode *CreateVarDeclarationNode(Arena *arena, Position pos, const uint8_t *var_name,
                                   VValueType var_type, const ASTNode *init_value);
 
 ASTNode *CreateTypeCastNode(Arena *arena, Position pos, ASTNode *expression,
@@ -113,7 +113,7 @@ ASTNode *CreateTypeCastNode(Arena *arena, Position pos, ASTNode *expression,
 ASTNode *CreateTernaryNode(Arena *arena, Position pos, const ASTNode *condition,
                            const ASTNode *then_expression, const ASTNode *else_expression);
 
-ASTNode *CreateModuleNode(Arena *arena, const char *module_name, Scope *scope);
+ASTNode *CreateModuleNode(Arena *arena, const uint8_t *module_name, Scope *scope);
 
 ASTNode *CreateBlockNode(Arena *arena, Position pos, ASTNode *statements, Scope *scope);
 

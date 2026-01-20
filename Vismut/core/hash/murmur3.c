@@ -57,7 +57,7 @@ uint32_t murmurhash3_32(const void *key, const size_t len, const uint32_t seed) 
 }
 
 // Оптимизированная версия для C-строк
-uint32_t murmurhash3_string(const char *str, const uint32_t seed) {
+uint32_t murmurhash3_string(const uint8_t *str, const uint32_t seed) {
     if (!str) return 0;
     return murmurhash3_32(str, strlen(str), seed);
 }

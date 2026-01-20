@@ -4,7 +4,7 @@
 
 #ifndef VISMUT_ERRORS_H
 #define VISMUT_ERRORS_H
-#include <wchar.h>
+#include <errno.h>
 
 #define VISMUT_ERRORS_START 0xffff
 

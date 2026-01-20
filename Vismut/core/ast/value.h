@@ -13,7 +13,7 @@ typedef struct {
     union {
         int64_t i64;
         double f64;
-        char *str;
+        uint8_t *str;
     };
 } VValue;
 

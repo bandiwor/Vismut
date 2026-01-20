@@ -12,7 +12,7 @@ void Run(const char *filename, const char *exe_name) {
     );
     system(command_buffer);
 
-    sprintf_s(command_buffer, sizeof(command_buffer),
+    sprintf_s((char *) command_buffer, sizeof(command_buffer),
               "%s", exe_name
     );
     system(command_buffer);

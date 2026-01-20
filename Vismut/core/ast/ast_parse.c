@@ -385,8 +385,8 @@ ASTParser ASTParser_Create(Tokenizer *tokenizer) {
     );
 
     return (ASTParser){
-        .source = tokenizer->source,
-        .source_length = tokenizer->source_length,
+        .source = tokenizer->start,
+        .source_length = tokenizer->limit - tokenizer->start,
         .arena = tokenizer->arena,
         .tokenizer = tokenizer,
         .current_token = (VToken){0},
@@ -404,7 +404,7 @@ static errno_t ASTParser_ParseNameDeclaration(ASTParser *ast_parser, ASTNode **n
 
     // Parse: var name
     NEXT_TOKEN_EXCEPT(ast_parser, err, TOKEN_IDENTIFIER);
-    const char *var_name = ast_parser->current_token.data.chars;
+    const uint8_t *var_name = ast_parser->current_token.data.chars;
 
     // Get next token TOKEN_ASSIGN or TOKEN_COLON
     NEXT_TOKEN_SAFE(ast_parser, err);

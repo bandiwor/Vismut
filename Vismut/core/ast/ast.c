@@ -1,4 +1,7 @@
 #include "ast.h"
+
+#include <stdio.h>
+
 #include "../ansi_colors.h"
 
 static void ASTNode_PrintNode(const ASTNode *, int);
@@ -32,7 +35,7 @@ static void print_value(const VValue *value) {
             break;
         case VALUE_STR:
             ansi_set_color(ANSI_COLOR_BRIGHT_GREEN);
-            printf("\"%s\"", value->str);
+            printf("\"%s\"", (char *) value->str);
             break;
         default:
             printf("<unknown value type>");
@@ -102,7 +105,8 @@ static void ASTNode_PrintNode(const ASTNode *node, const int depth) {
 
         case AST_VAR_REF:
             printf(" ");
-            PRINT_FG(ANSI_COLOR_BRIGHT_YELLOW, node->var_ref.var_name ? node->var_ref.var_name : "<NULL>");
+            PRINT_FG(ANSI_COLOR_BRIGHT_YELLOW,
+                     node->var_ref.var_name ? (const char*) node->var_ref.var_name : "<NULL>");
             PRINT_EXPR_TYPE(node->var_ref.expr_type);
             PRINT_NODE_POS(node);
             break;
@@ -146,7 +150,8 @@ static void ASTNode_PrintNode(const ASTNode *node, const int depth) {
             break;
         case AST_VAR_DECL:
             printf(" ");
-            PRINT_FG(ANSI_COLOR_BRIGHT_YELLOW, node->var_decl.var_name ? node->var_decl.var_name : "<NULL>");
+            PRINT_FG(ANSI_COLOR_BRIGHT_YELLOW,
+                     node->var_decl.var_name ? (const char*)node->var_decl.var_name : "<NULL>");
             PRINT_EXPR_TYPE(node->var_decl.var_type);
             PRINT_NODE_POS(node);
             if (node->var_decl.init_value) {
@@ -213,7 +218,7 @@ static void ASTNode_PrintNode(const ASTNode *node, const int depth) {
             printf(" ");
             ansi_set_color(ANSI_COLOR_BLACK);
             ansi_set_bg_color(ANSI_BG_WHITE);
-            printf("%s", node->module.module_name ? node->module.module_name : "<unnamed>");
+            printf("%s", node->module.module_name ? (char *) node->module.module_name : "<unnamed>");
             ansi_reset();
             PRINT_NODE_POS(node);
 
@@ -264,7 +269,7 @@ ASTNode *CreateLiteralNode(Arena *arena, const Position pos, const VValue value)
     return node;
 }
 
-ASTNode *CreateVarRefNode(Arena *arena, const Position pos, const char *var_name) {
+ASTNode *CreateVarRefNode(Arena *arena, const Position pos, const uint8_t *var_name) {
     ASTNode *node = Arena_Type(arena, ASTNode);
     *node = (ASTNode){
         .type = AST_VAR_REF,
@@ -329,7 +334,7 @@ ASTNode *CreateIfStatementNode(Arena *arena, const Position pos, const ASTNode *
     return node;
 }
 
-ASTNode *CreateVarDeclarationNode(Arena *arena, const Position pos, const char *var_name,
+ASTNode *CreateVarDeclarationNode(Arena *arena, const Position pos, const uint8_t *var_name,
                                   const VValueType var_type, const ASTNode *init_value) {
     ASTNode *node = Arena_Type(arena, ASTNode);
     *node = (ASTNode){
@@ -382,7 +387,7 @@ ASTNode *CreateTernaryNode(Arena *arena, const Position pos, const ASTNode *cond
     return node;
 }
 
-ASTNode *CreateModuleNode(Arena *arena, const char *module_name, Scope *scope) {
+ASTNode *CreateModuleNode(Arena *arena, const uint8_t *module_name, Scope *scope) {
     ASTNode *node = Arena_Type(arena, ASTNode);
     *node = (ASTNode){
         .type = AST_MODULE,

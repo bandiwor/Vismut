@@ -4,8 +4,7 @@
 
 #ifndef VISMUT_ANSI_COLORS_H
 #define VISMUT_ANSI_COLORS_H
-
-#include <wchar.h>
+#include <stdint.h>
 
 #define ANSI_COLOR_RESET   "\033[0m"
 #define ANSI_COLOR_BLACK   "\033[30m"

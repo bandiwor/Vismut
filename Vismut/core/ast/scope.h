@@ -16,7 +16,7 @@
 
 typedef struct tag_Symbol {
     struct tag_Symbol *next;
-    const char *name;
+    const uint8_t *name;
     VValue value;
     uint32_t hash;
     uint32_t flags;
@@ -37,16 +37,16 @@ typedef struct tag_Scope {
 
 Scope *Scope_Allocate(Arena *allocator, Scope *parent);
 
-errno_t Scope_Declare(Scope *scope, const char *name, VValueType type, uint32_t flags);
+errno_t Scope_Declare(Scope *scope, const uint8_t *name, VValueType type, uint32_t flags);
 
 errno_t Scope_RemoveUnused(Scope *scope);
 
-Symbol *Scope_Resolve(const Scope *scope, const char *name);
+Symbol *Scope_Resolve(const Scope *scope, const uint8_t *name);
 
-errno_t Scope_AssignConstantEvaluated(const Scope *scope, const char *name, VValue value);
+errno_t Scope_AssignConstantEvaluated(const Scope *scope, const uint8_t *name, VValue value);
 
-void Scope_MarkInitialized(const Scope *scope, const char *name);
+void Scope_MarkInitialized(const Scope *scope, const uint8_t *name);
 
-void Scope_MarkUsed(const Scope *scope, const char *name);
+void Scope_MarkUsed(const Scope *scope, const uint8_t *name);
 
 #endif //VISMUT_SCOPE_H

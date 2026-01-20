@@ -80,7 +80,7 @@ static void rehash(Scope *scope, const size_t new_capacity) {
 
 static Symbol *create_symbol(
     Arena *allocator,
-    const char *name,
+    const uint8_t *name,
     const VValueType type,
     const uint32_t flags,
     const uint32_t hash
@@ -99,7 +99,7 @@ static Symbol *create_symbol(
 }
 
 
-errno_t Scope_Declare(Scope *scope, const char *name,
+errno_t Scope_Declare(Scope *scope, const uint8_t *name,
                       const VValueType type, const uint32_t flags) {
     DEBUG_ASSERT(scope);
     DEBUG_ASSERT(name);
@@ -151,7 +151,7 @@ errno_t Scope_RemoveUnused(Scope *scope) {
 }
 
 
-Symbol *Scope_Resolve(const Scope *scope, const char *name) {
+Symbol *Scope_Resolve(const Scope *scope, const uint8_t *name) {
     DEBUG_ASSERT(scope);
     DEBUG_ASSERT(name);
 
@@ -171,7 +171,7 @@ Symbol *Scope_Resolve(const Scope *scope, const char *name) {
 }
 
 
-errno_t Scope_AssignConstantEvaluated(const Scope *scope, const char *name, const VValue value) {
+errno_t Scope_AssignConstantEvaluated(const Scope *scope, const uint8_t *name, const VValue value) {
     DEBUG_ASSERT(scope != NULL);
     DEBUG_ASSERT(name != NULL);
 
@@ -190,7 +190,7 @@ errno_t Scope_AssignConstantEvaluated(const Scope *scope, const char *name, cons
     return true;
 }
 
-void Scope_MarkInitialized(const Scope *scope, const char *name) {
+void Scope_MarkInitialized(const Scope *scope, const uint8_t *name) {
     DEBUG_ASSERT(scope != NULL);
     DEBUG_ASSERT(name != NULL);
 
@@ -200,7 +200,7 @@ void Scope_MarkInitialized(const Scope *scope, const char *name) {
     }
 }
 
-void Scope_MarkUsed(const Scope *scope, const char *name) {
+void Scope_MarkUsed(const Scope *scope, const uint8_t *name) {
     DEBUG_ASSERT(scope != NULL);
     DEBUG_ASSERT(name != NULL);
 

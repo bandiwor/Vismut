@@ -1,6 +1,5 @@
 #include <math.h>
 #include <stdlib.h>
-#include <wchar.h>
 #include <windows.h>
 
 #include "Vismut/core/ansi_colors.h"
@@ -31,6 +30,13 @@ int main(int argc, const char **argv) {
     c_filename[filename_len] = '.';
     c_filename[filename_len + 1] = 'c';
     c_filename[filename_len + 2] = '\0';
+    char exe_filename[filename_len + 5];
+    memcpy(exe_filename, filename, strlen(filename));
+    exe_filename[filename_len] = '.';
+    exe_filename[filename_len + 1] = 'e';
+    exe_filename[filename_len + 2] = 'x';
+    exe_filename[filename_len + 3] = 'e';
+    exe_filename[filename_len + 4] = '\0';
 
     StringView text;
     if ((err = Reader_ReadFile(filename, &text)) != 0) {
@@ -40,7 +46,7 @@ int main(int argc, const char **argv) {
 
     Arena *arena = Arena_Create(ARENA_BLOCK_SIZE_DEFAULT);
 
-    Tokenizer tokenizer = Tokenizer_Create(text.data, text.length, filename, arena);
+    Tokenizer tokenizer = Tokenizer_Create(text.data, text.length, (uint8_t *) filename, arena);
     ASTParser ast_parser = ASTParser_Create(&tokenizer);
 
     if ((err = ASTParser_Parse(&ast_parser)) != VISMUT_ERROR_OK) {
@@ -69,7 +75,7 @@ int main(int argc, const char **argv) {
     Arena_Destroy(arena);
     free(text.data);
 
-    Run(c_filename, "VismutCompiled.exe");
+    Run(c_filename, exe_filename);
 
     return 0;
 }

@@ -2,7 +2,7 @@
 
 
 attribute_pure
-int64_t StrToInt64Bin(const char *str) {
+int64_t StrToInt64Bin(const uint8_t *str) {
     int64_t result = 0;
     while (*str) {
         result = (result << 1) | (*str++ - '0');
@@ -11,7 +11,7 @@ int64_t StrToInt64Bin(const char *str) {
 }
 
 attribute_pure
-int64_t StrToInt64Oct(const char *str) {
+int64_t StrToInt64Oct(const uint8_t *str) {
     int64_t result = 0;
     while (*str) {
         result = (result << 3) | (*str++ - '0');
@@ -20,7 +20,7 @@ int64_t StrToInt64Oct(const char *str) {
 }
 
 attribute_pure
-int64_t StrToInt64Dec(const char *str) {
+int64_t StrToInt64Dec(const uint8_t *str) {
     int64_t result = 0;
     while (*str) {
         result = result * 10 + (*str++ - '0');
@@ -29,11 +29,11 @@ int64_t StrToInt64Dec(const char *str) {
 }
 
 attribute_pure
-int64_t StrToInt64Hex(const char *str) {
+int64_t StrToInt64Hex(const uint8_t *str) {
     int64_t result = 0;
 
     while (*str) {
-        const char c = *str++;
+        const uint8_t c = *str++;
 
         const int value = (c >= '0' && c <= '9')
                               ? (c - '0')

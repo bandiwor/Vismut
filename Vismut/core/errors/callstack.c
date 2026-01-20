@@ -82,8 +82,8 @@ void CallStack_Print(void) {
 
         if (callstack[i].file_name) {
             // Извлекаем только имя файла из полного пути
-            const char *filename = callstack[i].file_name;
-            const char *slash = strrchr(filename, '/');
+            const uint8_t *filename = callstack[i].file_name;
+            const uint8_t *slash = strrchr(filename, '/');
             if (!slash) slash = strrchr(filename, '\\');
             if (slash) filename = slash + 1;
 
@@ -126,8 +126,8 @@ void CallStack_PrintTop(int count) {
         }
 
         if (callstack[i].file_name) {
-            const char *filename = callstack[i].file_name;
-            const char *slash = strrchr(filename, L'/');
+            const uint8_t *filename = callstack[i].file_name;
+            const uint8_t *slash = strrchr(filename, L'/');
             if (!slash) slash = strrchr(filename, L'\\');
             if (slash) filename = slash + 1;
 

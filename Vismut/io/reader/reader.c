@@ -12,7 +12,7 @@ errno_t Reader_ReadFile(const char *filename, StringView *text) {
     FILE *file = NULL;
     errno_t err = 0;
 
-    file = fopen(filename, "rb");
+    file = fopen((const char *) filename, "rb");
     if (file == NULL) {
         return VISMUT_ERROR_IO;
     }
@@ -28,7 +28,7 @@ errno_t Reader_ReadFile(const char *filename, StringView *text) {
         return VISMUT_ERROR_IO;
     }
 
-    char *raw_buffer = malloc(file_size + 1);
+    uint8_t *raw_buffer = malloc(file_size + 1);
     if (raw_buffer == NULL) {
         fclose(file);
         return VISMUT_ERROR_ALLOC;

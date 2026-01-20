@@ -4,8 +4,8 @@
 
 #ifndef VISMUT_TYPES_H
 #define VISMUT_TYPES_H
+#include <stdint.h>
 #include <wchar.h>
-#include <stdio.h>
 #include "types_maps.h"
 #include "errors/callstack.h"
 #include "debug.h"
@@ -102,7 +102,7 @@ typedef enum {
 attribute_const const char *VValueType_String(VValueType);
 
 typedef struct {
-    char *data;
+    uint8_t *data;
     size_t length;
 } StringView;
 
@@ -111,12 +111,7 @@ typedef struct {
     size_t length;
 } Position;
 
-attribute_const static Position Position_Join(const Position from, const Position to) {
-    return (Position){
-        from.offset,
-        to.offset + to.length - from.offset,
-    };
-}
+#define Position_Join(from, to) (Position){(from).offset, (to).offset + (to).length - (from).offset}
 
 #define START_BLOCK_WRAPPER do {
 #define END_BLOCK_WRAPPER } while(0)

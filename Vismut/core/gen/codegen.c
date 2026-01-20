@@ -56,7 +56,7 @@ static void CodeGen_GenerateLiteral(const CodeGenContext ctx, const ASTNode *nod
             break;
         case VALUE_STR:
             CodeGen_Emit(ctx, "\"");
-            for (const char *ptr = node->literal.str; *ptr != '\0'; ++ptr) {
+            for (const uint8_t *ptr = node->literal.str; *ptr != '\0'; ++ptr) {
                 switch (*ptr) {
                     case L'\n':
                         CodeGen_Emit(ctx, "\\n");
@@ -200,7 +200,7 @@ static const char *CodeGen_CTypeString(const VValueType type) {
         case VALUE_F64:
             return "double";
         case VALUE_STR:
-            return "char*";
+            return "uint8_t*";
         default:
             return VValueType_String(type);
     }
@@ -258,7 +258,7 @@ static void CodeGen_GenerateVarDeclaration(const CodeGenContext ctx, const ASTNo
     DEBUG_ASSERT(node->type == AST_VAR_DECL);
 
     const char *c_var_type = CodeGen_CTypeString(node->var_decl.var_type);
-    const char *var_name = node->var_decl.var_name;
+    const uint8_t *var_name = node->var_decl.var_name;
     const ASTNode *init_expr = (const ASTNode *) node->var_decl.init_value;
 
     CodeGen_EmitIndent(ctx, indent_level);

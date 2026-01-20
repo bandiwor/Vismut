@@ -14,7 +14,7 @@ typedef struct {
     union {
         int64_t i64;
         double f64;
-        char *chars;
+        uint8_t *chars;
     } data;
 } VToken;
 

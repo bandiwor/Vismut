@@ -9,7 +9,7 @@
 
 #define MURMURHASH3_DEFAULT_STR_SEED 0x9747b28c
 
-attribute_pure uint32_t murmurhash3_string(const char *str, uint32_t seed);
+attribute_pure uint32_t murmurhash3_string(const uint8_t *str, uint32_t seed);
 
 attribute_const uint32_t murmurhash3_int64(int64_t value, uint32_t seed);
 
