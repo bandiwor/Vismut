@@ -77,7 +77,9 @@ add_executable(Vismut main.c
         Vismut/core/ast/ast_optimize.c
         Vismut/core/ast/ast_optimize.h
         Vismut/core/gen/codegen.c
-        Vismut/core/gen/codegen.h)
+        Vismut/core/gen/codegen.h
+        Vismut/core/gen/run.h
+        Vismut/core/gen/run.c)
 
 # Разделение флагов по конфигурациям
 target_compile_options(Vismut PRIVATE

@@ -9,28 +9,38 @@
 #include "Vismut/core/ast/ast_parse.h"
 #include "Vismut/core/errors/errors.h"
 #include "Vismut/core/gen/codegen.h"
+#include "Vismut/core/gen/run.h"
 #include "Vismut/core/tokenizer/tokenizer.h"
 #include "Vismut/io/reader/reader.h"
 
 #include "Vismut/core/memory/arena.h"
 
 
-int main(void) {
+int main(int argc, const char **argv) {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
     win_ansi_init();
 
     errno_t err;
 
+    const char *filename = argv[1] == NULL ? "..\\code.txt" : argv[1];
+    const size_t filename_len = strlen(filename);
+
+    char c_filename[filename_len + 3];
+    memcpy(c_filename, filename, strlen(filename));
+    c_filename[filename_len] = '.';
+    c_filename[filename_len + 1] = 'c';
+    c_filename[filename_len + 2] = '\0';
+
     StringView text;
-    if ((err = Reader_ReadFile("..\\code.txt", &text)) != 0) {
+    if ((err = Reader_ReadFile(filename, &text)) != 0) {
         printf("%s\n", GetErrorString(err));
         return EXIT_FAILURE;
     }
 
     Arena *arena = Arena_Create(ARENA_BLOCK_SIZE_DEFAULT);
 
-    Tokenizer tokenizer = Tokenizer_Create(text.data, text.length, "code.txt", arena);
+    Tokenizer tokenizer = Tokenizer_Create(text.data, text.length, filename, arena);
     ASTParser ast_parser = ASTParser_Create(&tokenizer);
 
     if ((err = ASTParser_Parse(&ast_parser)) != VISMUT_ERROR_OK) {
@@ -50,14 +60,16 @@ int main(void) {
 
     ASTNode_Print(ast_parser.module_node);
 
-    FILE *file = fopen("..\\code.c", "wb");
+    FILE *file = fopen(c_filename, "wb");
     if (file == NULL) {
         return EXIT_FAILURE;
     }
     CodeGen_GenerateFromAST(CodeGen_CreateContext(file), ast_parser.module_node);
     fclose(file);
-
     Arena_Destroy(arena);
     free(text.data);
+
+    Run(c_filename, "VismutCompiled.exe");
+
     return 0;
 }
