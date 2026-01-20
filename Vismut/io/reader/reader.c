@@ -8,7 +8,7 @@
 #include "../../core/errors/errors.h"
 
 
-errno_t Reader_ReadFile(const wchar_t *filename, FileText *text) {
+errno_t Reader_ReadFile(const wchar_t *filename, StringView *text) {
     FILE *file = NULL;
     errno_t err = 0;
 

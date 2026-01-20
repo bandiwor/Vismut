@@ -21,7 +21,7 @@ int main(void) {
 
     errno_t err;
 
-    FileText text;
+    StringView text;
     if ((err = Reader_ReadFile(L"..\\code.txt", &text)) != 0) {
         wprintf(L"%ls\n", GetErrorString(err));
         return EXIT_FAILURE;

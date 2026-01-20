@@ -102,9 +102,9 @@ typedef enum {
 attribute_const const wchar_t *VValueType_String(VValueType);
 
 typedef struct {
-    wchar_t *data;
+    char *data;
     size_t length;
-} FileText;
+} StringView;
 
 typedef struct {
     size_t offset;
