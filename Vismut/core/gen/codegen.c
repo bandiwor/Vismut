@@ -55,7 +55,7 @@ static void CodeGen_GenerateLiteral(const CodeGenContext ctx, const ASTNode *nod
             }
             break;
         case VALUE_STR:
-            CodeGen_Emit(ctx, "L\"");
+            CodeGen_Emit(ctx, "\"");
             for (const char *ptr = node->literal.str; *ptr != '\0'; ++ptr) {
                 switch (*ptr) {
                     case L'\n':
@@ -74,7 +74,7 @@ static void CodeGen_GenerateLiteral(const CodeGenContext ctx, const ASTNode *nod
                         CodeGen_Emit(ctx, "\\t");
                         break;
                     default:
-                        CodeGen_EmitFormat(ctx, "%lc", *ptr);
+                        CodeGen_EmitFormat(ctx, "%c", *ptr);
                 }
             }
             CodeGen_Emit(ctx, "\"");
