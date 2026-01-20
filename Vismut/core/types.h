@@ -27,23 +27,23 @@
 #if DEBUG
 #define DEBUG_ASSERT(CONDITION) do {  \
     if (!(CONDITION)) {                          \
-        fwprintf_s(stderr, L"Assertion Failed!\nAt: " LOCATION "\n--> Function: %hs\n--> Assertion: \"%hs\"\n", __FUNCTION__, STRINGIFY(CONDITION)); \
+        fprintf_s(stderr, "Assertion Failed!\nAt: " LOCATION "\n--> Function: %s\n--> Assertion: \"%s\"\n", __FUNCTION__, STRINGIFY(CONDITION)); \
         CALLSTACK_PRINT();                       \
         exit(1);                                 \
     }                                            \
 } while (0)
 #define DEBUG_LOG_ASSERT(CONDITION, TEXT) do {  \
     if (!(CONDITION)) {                          \
-        fwprintf_s(stderr, L"Assertion Failed!\nAt: " LOCATION "\n--> Function: %hs\n--> Assertion: \"%hs\"\n", __FUNCTION__, STRINGIFY(CONDITION)); \
-        fwprintf_s(stderr, L"--> Details: " TEXT);                   \
+        fprintf_s(stderr, "Assertion Failed!\nAt: " LOCATION "\n--> Function: %s\n--> Assertion: \"%s\"\n", __FUNCTION__, STRINGIFY(CONDITION)); \
+        fprintf_s(stderr, "--> Details: " TEXT);                   \
         CALLSTACK_PRINT();                       \
         exit(1);                                 \
     }                                            \
 } while (0)
 #define DEBUG_LOG_ASSERT_WITH_ARGS(CONDITION, TEXT, ...) do {  \
     if (!(CONDITION)) {                          \
-        fwprintf_s(stderr, L"Assertion Failed!\nAt: " LOCATION "\n--> Function: %hs\n--> Assertion: \"%hs\"\n", __FUNCTION__, STRINGIFY(CONDITION)); \
-        fwprintf_s(stderr, L"--> Details: " TEXT, __VA_ARGS__);                   \
+        fprintf_s(stderr, "Assertion Failed!\nAt: " LOCATION "\n--> Function: %s\n--> Assertion: \"%s\"\n", __FUNCTION__, STRINGIFY(CONDITION)); \
+        fprintf_s(stderr, "--> Details: " TEXT, __VA_ARGS__);                   \
         CALLSTACK_PRINT();                       \
         exit(1);                                 \
     }                                            \
@@ -62,7 +62,7 @@ typedef enum {
     TOKEN_COUNT
 } VTokenType;
 
-attribute_const const wchar_t *VTokenType_String(VTokenType);
+attribute_const const char *VTokenType_String(VTokenType);
 
 typedef enum {
 #define X(name, _) name,
@@ -71,7 +71,7 @@ typedef enum {
     AST_BINARY_COUNT
 } ASTBinaryType;
 
-attribute_const const wchar_t *ASTBinaryType_String(ASTBinaryType);
+attribute_const const char *ASTBinaryType_String(ASTBinaryType);
 
 typedef enum {
 #define X(name, _) name,
@@ -80,7 +80,7 @@ typedef enum {
     AST_UNARY_COUNT
 } ASTUnaryType;
 
-attribute_const const wchar_t *ASTUnaryType_String(ASTUnaryType);
+attribute_const const char *ASTUnaryType_String(ASTUnaryType);
 
 typedef enum {
 #define X(name, _) name,
@@ -89,7 +89,7 @@ typedef enum {
     AST_COUNT
 } ASTNodeType;
 
-attribute_const const wchar_t *ASTNodeType_String(ASTNodeType);
+attribute_const const char *ASTNodeType_String(ASTNodeType);
 
 typedef enum {
 #define X(name, _) name,
@@ -99,7 +99,7 @@ typedef enum {
 } VValueType;
 
 
-attribute_const const wchar_t *VValueType_String(VValueType);
+attribute_const const char *VValueType_String(VValueType);
 
 typedef struct {
     char *data;

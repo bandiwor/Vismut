@@ -1,5 +1,6 @@
 #include "callstack.h"
 
+#include <stdio.h>
 #include <string.h>
 
 
@@ -22,13 +23,13 @@ void CallStack_Init(void) {
     }
 }
 
-void CallStack_Push(const char *func, const char *file, const int line, const wchar_t *info) {
+void CallStack_Push(const char *func, const char *file, const int line, const char *info) {
     if (!callstack_initialized) {
         CallStack_Init();
     }
 
     if (callstack_depth >= CALLSTACK_MAX_DEPTH) {
-        fwprintf(stderr, L"[CallStack_Push (callstack.c)] CallStack overflow! Max depth: %d\n", CALLSTACK_MAX_DEPTH);
+        fprintf(stderr, "[CallStack_Push (callstack.c)] CallStack overflow! Max depth: %d\n", CALLSTACK_MAX_DEPTH);
         return;
     }
 
@@ -42,7 +43,7 @@ void CallStack_Push(const char *func, const char *file, const int line, const wc
 
 void CallStack_Pop(void) {
     if (callstack_depth <= 0) {
-        fwprintf(stderr, L"[CallStack_Push (callstack.c)] CallStack underflow!\n");
+        fprintf(stderr, "[CallStack_Push (callstack.c)] CallStack underflow!\n");
         return;
     }
 
@@ -60,24 +61,24 @@ int CallStack_GetDepth(void) {
 
 void CallStack_Print(void) {
     if (callstack_depth == 0) {
-        fwprintf(stderr, L"Call stack is empty\n");
+        fprintf(stderr, "Call stack is empty\n");
         return;
     }
 
-    fwprintf(stderr, L"\n══════════════════════════════════════════════════════\n");
-    fwprintf(stderr, L"Call Stack Trace (most recent call last):\n");
-    fwprintf(stderr, L"══════════════════════════════════════════════════════\n");
+    fprintf(stderr, "\n══════════════════════════════════════════════════════\n");
+    fprintf(stderr, "Call Stack Trace (most recent call last):\n");
+    fprintf(stderr, "══════════════════════════════════════════════════════\n");
 
     for (int i = 0; i < callstack_depth; i++) {
-        fwprintf(stderr, L"%4d. ", i + 1);
+        fprintf(stderr, "%4d. ", i + 1);
 
         if (callstack[i].function_name) {
-            fwprintf(stderr, L"%hs", callstack[i].function_name);
+            fprintf(stderr, "%hs", callstack[i].function_name);
         } else {
-            fwprintf(stderr, L"<unknown>");
+            fprintf(stderr, "<unknown>");
         }
 
-        fwprintf(stderr, L" at ");
+        fprintf(stderr, " at ");
 
         if (callstack[i].file_name) {
             // Извлекаем только имя файла из полного пути
@@ -86,25 +87,25 @@ void CallStack_Print(void) {
             if (!slash) slash = strrchr(filename, '\\');
             if (slash) filename = slash + 1;
 
-            fwprintf(stderr, L"%hs:%d", filename, callstack[i].line_number);
+            fprintf(stderr, "%hs:%d", filename, callstack[i].line_number);
         } else {
-            fwprintf(stderr, L"<unknown file>");
+            fprintf(stderr, "<unknown file>");
         }
 
         if (callstack[i].additional_info) {
-            fwprintf(stderr, L" [%ls]", callstack[i].additional_info);
+            fprintf(stderr, " [%s]", callstack[i].additional_info);
         }
 
-        fwprintf(stderr, L"\n");
+        fprintf(stderr, "\n");
     }
 
-    fwprintf(stderr, L"══════════════════════════════════════════════════════\n\n");
+    fprintf(stderr, "══════════════════════════════════════════════════════\n\n");
 }
 
 
 void CallStack_PrintTop(int count) {
     if (callstack_depth == 0) {
-        fwprintf(stderr, L"Call stack is empty\n");
+        fprintf(stderr, "Call stack is empty\n");
         return;
     }
 
@@ -112,16 +113,16 @@ void CallStack_PrintTop(int count) {
         count = callstack_depth;
     }
 
-    fwprintf(stderr, L"\nTop %d frames of call stack:\n", count);
-    fwprintf(stderr, L"────────────────────────────────────────────\n");
+    fprintf(stderr, "\nTop %d frames of call stack:\n", count);
+    fprintf(stderr, "────────────────────────────────────────────\n");
 
     // Выводим только верхние count фреймов
     int start = callstack_depth - count;
     for (int i = start; i < callstack_depth; i++) {
-        fwprintf(stderr, L"%3d. ", i - start + 1);
+        fprintf(stderr, "%3d. ", i - start + 1);
 
         if (callstack[i].function_name) {
-            fwprintf(stderr, L"%hs", callstack[i].function_name);
+            fprintf(stderr, "%hs", callstack[i].function_name);
         }
 
         if (callstack[i].file_name) {
@@ -130,17 +131,17 @@ void CallStack_PrintTop(int count) {
             if (!slash) slash = strrchr(filename, L'\\');
             if (slash) filename = slash + 1;
 
-            fwprintf(stderr, L" (%hs:%d)", filename, callstack[i].line_number);
+            fprintf(stderr, " (%hs:%d)", filename, callstack[i].line_number);
         }
 
         if (callstack[i].additional_info) {
-            fwprintf(stderr, L" [%ls]", callstack[i].additional_info);
+            fprintf(stderr, " [%s]", callstack[i].additional_info);
         }
 
-        fwprintf(stderr, L"\n");
+        fprintf(stderr, "\n");
     }
 
-    fwprintf(stderr, L"────────────────────────────────────────────\n");
+    fprintf(stderr, "────────────────────────────────────────────\n");
 }
 
 #endif

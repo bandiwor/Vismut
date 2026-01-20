@@ -8,12 +8,12 @@
 
 #include "types.h"
 
-int64_t WStrToInt64Bin(const wchar_t *str);
+int64_t StrToInt64Bin(const char *str);
 
-int64_t WStrToInt64Oct(const wchar_t *str);
+int64_t StrToInt64Oct(const char *str);
 
-int64_t WStrToInt64Dec(const wchar_t *str);
+int64_t StrToInt64Dec(const char *str);
 
-int64_t WStrToInt64Hex(const wchar_t *str);
+int64_t StrToInt64Hex(const char *str);
 
 #endif //VISMUT_CONVERT_H

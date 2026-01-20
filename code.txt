@@ -1,4 +1,4 @@
-$points = 75
-$mark = points < 35 ? 2 : points < 60 ? 3 : points < 75 ? 4 : 5
-
-:: "For pointas = ", points, " mark = ", mark, "\n"
+$a = 15
+$b = 30
+$max = a >= b ? a : b
+:: max

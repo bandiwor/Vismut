@@ -7,6 +7,6 @@
 #include "../../core/Vismut.h"
 
 
-errno_t Reader_ReadFile(const wchar_t *filename, StringView *text);
+errno_t Reader_ReadFile(const char *filename, StringView *text);
 
 #endif //VISMUT_READER_H

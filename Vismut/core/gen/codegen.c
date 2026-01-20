@@ -1,6 +1,7 @@
 #include "codegen.h"
 
 #include <stdarg.h>
+#include <stdlib.h>
 
 CodeGenContext CodeGen_CreateContext(FILE *output) {
     return (CodeGenContext){
@@ -18,76 +19,65 @@ static void CodeGen_EmitIndent(const CodeGenContext ctx, const int indent_level)
     }
 }
 
-static void CodeGen_Emit(const CodeGenContext ctx, const wchar_t *line) {
-    fwprintf(ctx.output, L"%ls", line);
+static void CodeGen_Emit(const CodeGenContext ctx, const char *line) {
+    fprintf(ctx.output, "%s", line);
 }
 
-static void CodeGen_EmitFormat(const CodeGenContext ctx, const wchar_t *line, ...) {
+static void CodeGen_EmitFormat(const CodeGenContext ctx, const char *line, ...) {
     va_list args;
     va_start(args, line);
-    vfwprintf(ctx.output, line, args);
+    vfprintf(ctx.output, line, args);
     va_end(args);
 }
 
 
-static void CodeGen_EmitLine(const CodeGenContext ctx, const int indent_level, const wchar_t *fmt) {
+static void CodeGen_EmitLine(const CodeGenContext ctx, const int indent_level, const char *fmt) {
     CodeGen_EmitIndent(ctx, indent_level);
-    fwprintf(ctx.output, L"%ls\n", fmt);
+    fprintf(ctx.output, "%s\n", fmt);
 }
-
-// static void CodeGen_EmitLineFormat(const CodeGenContext *ctx, const wchar_t *fmt, ...) {
-//     CodeGen_EmitIndent(ctx);
-//
-//     va_list args;
-//     va_start(args, fmt);
-//     vfwprintf_s(ctx->output, fmt, args);
-//     va_end(args);
-//
-//     fwprintf_s(ctx->output, L"\n");
-// }
 
 static void CodeGen_GenerateLiteral(const CodeGenContext ctx, const ASTNode *node) {
     DEBUG_ASSERT(node->type == AST_LITERAL);
 
     switch (node->literal.type) {
         case VALUE_I64:
-            CodeGen_EmitFormat(ctx, L"%lldLL", node->literal.i64);
+            CodeGen_EmitFormat(ctx, "%lldL", node->literal.i64);
             break;
         case VALUE_F64:
             if (node->literal.f64 != node->literal.f64) {
-                CodeGen_Emit(ctx, L"NAN");
+                CodeGen_Emit(ctx, "NAN");
             } else if (node->literal.f64 == 1.0 / 0.0) {
-                CodeGen_Emit(ctx, L"INFINITY");
+                CodeGen_Emit(ctx, "INFINITY");
             } else if (node->literal.f64 == -1.0 / 0.0) {
-                CodeGen_Emit(ctx, L"-INFINITY");
+                CodeGen_Emit(ctx, "-INFINITY");
             } else {
-                CodeGen_EmitFormat(ctx, L"%.17g", node->literal.f64);
+                CodeGen_EmitFormat(ctx, "%.17g", node->literal.f64);
             }
             break;
-        case VALUE_WSTR:
-            CodeGen_Emit(ctx, L"L\"");
-            for (const wchar_t *ptr = node->literal.wstr; *ptr != '\0'; ++ptr) {
+        case VALUE_STR:
+            CodeGen_Emit(ctx, "L\"");
+            for (const char *ptr = node->literal.str; *ptr != '\0'; ++ptr) {
                 switch (*ptr) {
                     case L'\n':
-                        CodeGen_Emit(ctx, L"\\n");
+                        CodeGen_Emit(ctx, "\\n");
                         break;
                     case L'\r':
-                        CodeGen_Emit(ctx, L"\\r");
+                        CodeGen_Emit(ctx, "\\r");
                         break;
                     case L'\b':
-                        CodeGen_Emit(ctx, L"\\b");
+                        CodeGen_Emit(ctx, "\\b");
                         break;
                     case L'\v':
-                        CodeGen_Emit(ctx, L"\\v");
+                        CodeGen_Emit(ctx, "\\v");
                         break;
                     case L'\t':
-                        CodeGen_Emit(ctx, L"\\t");
+                        CodeGen_Emit(ctx, "\\t");
                         break;
                     default:
-                        CodeGen_EmitFormat(ctx, L"%lc", *ptr);
+                        CodeGen_EmitFormat(ctx, "%lc", *ptr);
                 }
             }
-            CodeGen_Emit(ctx, L"\"");
+            CodeGen_Emit(ctx, "\"");
             break;
         default:
             break;
@@ -97,120 +87,120 @@ static void CodeGen_GenerateLiteral(const CodeGenContext ctx, const ASTNode *nod
 static void CodeGen_GenerateBinaryOp(const CodeGenContext ctx, const ASTNode *node) {
     DEBUG_ASSERT(node->type == AST_BINARY);
 
-    const wchar_t *op_str = NULL;
+    const char *op_str = NULL;
     switch (node->binary_op.op) {
         case AST_BINARY_ADD:
-            op_str = L"+";
+            op_str = "+";
             break;
         case AST_BINARY_SUB:
-            op_str = L"-";
+            op_str = "-";
             break;
         case AST_BINARY_MUL:
-            op_str = L"*";
+            op_str = "*";
             break;
         case AST_BINARY_DIV:
-            op_str = L"/";
+            op_str = "/";
             break;
         case AST_BINARY_ASSIGN:
-            op_str = L"=";
+            op_str = "=";
             break;
         case AST_BINARY_MOD:
-            op_str = L"%";
+            op_str = "%";
             break;
         case AST_BINARY_POW:
-            CodeGen_Emit(ctx, L"pow(");
+            CodeGen_Emit(ctx, "pow(");
             CodeGen_GenerateExpression(ctx, (const ASTNode *) node->binary_op.left);
-            CodeGen_Emit(ctx, L", ");
+            CodeGen_Emit(ctx, ", ");
             CodeGen_GenerateExpression(ctx, (const ASTNode *) node->binary_op.right);
-            CodeGen_Emit(ctx, L")");
+            CodeGen_Emit(ctx, ")");
             return;
         case AST_BINARY_EQUALS:
-            op_str = L"==";
+            op_str = "==";
             break;
         case AST_BINARY_NOT_EQUALS:
-            op_str = L"!=";
+            op_str = "!=";
             break;
         case AST_BINARY_LESS_THAN:
-            op_str = L"<";
+            op_str = "<";
             break;
         case AST_BINARY_LESS_THAN_OR_EQUALS:
-            op_str = L"<=";
+            op_str = "<=";
             break;
         case AST_BINARY_GREATER_THAN:
-            op_str = L">";
+            op_str = ">";
             break;
         case AST_BINARY_GREATER_THAN_OR_EQUALS:
-            op_str = L">=";
+            op_str = ">=";
             break;
         case AST_BINARY_LOGICAL_AND:
-            op_str = L"&&";
+            op_str = "&&";
             break;
         case AST_BINARY_BITWISE_AND:
-            op_str = L"&";
+            op_str = "&";
             break;
         case AST_BINARY_LOGICAL_OR:
-            op_str = L"||";
+            op_str = "||";
             break;
         case AST_BINARY_BITWISE_OR:
-            op_str = L"|";
+            op_str = "|";
             break;
         default:
-            CodeGen_EmitFormat(ctx, L"/* unknown binary op '%ls' */", ASTBinaryType_String(node->binary_op.op));
+            CodeGen_EmitFormat(ctx, "/* unknown binary op '%s' */", ASTBinaryType_String(node->binary_op.op));
             return;
     }
 
     //  ((<left>) <op> (<right>))
-    CodeGen_Emit(ctx, L"((");
+    CodeGen_Emit(ctx, "((");
     CodeGen_GenerateExpression(ctx, (const ASTNode *) node->binary_op.left);
-    CodeGen_EmitFormat(ctx, L") %ls (", op_str);
+    CodeGen_EmitFormat(ctx, ") %s (", op_str);
     CodeGen_GenerateExpression(ctx, (const ASTNode *) node->binary_op.right);
-    CodeGen_Emit(ctx, L"))");
+    CodeGen_Emit(ctx, "))");
 }
 
 static void CodeGen_GenerateUnaryOp(const CodeGenContext ctx, const ASTNode *node) {
     DEBUG_ASSERT(node->type == AST_UNARY);
 
-    const wchar_t *op_str = NULL;
+    const char *op_str = NULL;
     switch (node->unary_op.op) {
         case AST_UNARY_PLUS:
-            op_str = L"+";
+            op_str = "+";
             break;
         case AST_UNARY_MINUS:
-            op_str = L"-";
+            op_str = "-";
             break;
         case AST_UNARY_LOGICAL_NOT:
-            op_str = L"!";
+            op_str = "!";
             break;
         case AST_UNARY_BITWISE_NOT:
-            op_str = L"~";
+            op_str = "~";
             break;
         case AST_UNARY_INCREMENT:
-            op_str = L"++";
+            op_str = "++";
             break;
         case AST_UNARY_DECREMENT:
-            op_str = L"--";
+            op_str = "--";
             break;
         default:
-            CodeGen_EmitFormat(ctx, L"/* unknown unary op '%ls' */", ASTUnaryType_String(node->unary_op.op));
+            CodeGen_EmitFormat(ctx, "/* unknown unary op '%s' */", ASTUnaryType_String(node->unary_op.op));
             return;
     }
 
     //  (<op>(<expr>))
-    CodeGen_EmitFormat(ctx, L"(%ls(", op_str);
+    CodeGen_EmitFormat(ctx, "(%s(", op_str);
     CodeGen_GenerateExpression(ctx, (const ASTNode *) node->unary_op.operand);
-    CodeGen_Emit(ctx, L"))");
+    CodeGen_Emit(ctx, "))");
 }
 
-static const wchar_t *CodeGen_CTypeString(const VValueType type) {
+static const char *CodeGen_CTypeString(const VValueType type) {
     switch (type) {
         case VALUE_VOID:
-            return L"void";
+            return "void";
         case VALUE_I64:
-            return L"long long";
+            return "long long";
         case VALUE_F64:
-            return L"double";
-        case VALUE_WSTR:
-            return L"wchar_t*";
+            return "double";
+        case VALUE_STR:
+            return "char*";
         default:
             return VValueType_String(type);
     }
@@ -220,22 +210,22 @@ static void CodeGen_GenerateTypeCast(const CodeGenContext ctx, const ASTNode *no
     DEBUG_ASSERT(node->type == AST_TYPE_CAST);
 
     //  ((<target>)(<expr>))
-    CodeGen_EmitFormat(ctx, L"((%ls)(", CodeGen_CTypeString(node->type_cast.target_type));
+    CodeGen_EmitFormat(ctx, "((%s)(", CodeGen_CTypeString(node->type_cast.target_type));
     CodeGen_GenerateExpression(ctx, (ASTNode *) node->type_cast.expression);
-    CodeGen_Emit(ctx, L"))");
+    CodeGen_Emit(ctx, "))");
 }
 
 static void CodeGen_GenerateTernary(const CodeGenContext ctx, const ASTNode *node) {
     DEBUG_ASSERT(node->type == AST_TERNARY);
 
     // ((<condition>) ? (<then>) : (<else>))
-    CodeGen_Emit(ctx, L"((");
+    CodeGen_Emit(ctx, "((");
     CodeGen_GenerateExpression(ctx, (const ASTNode *) node->ternary_op.condition);
-    CodeGen_Emit(ctx, L") ? (");
+    CodeGen_Emit(ctx, ") ? (");
     CodeGen_GenerateExpression(ctx, (const ASTNode *) node->ternary_op.then_expression);
-    CodeGen_Emit(ctx, L") : (");
+    CodeGen_Emit(ctx, ") : (");
     CodeGen_GenerateExpression(ctx, (const ASTNode *) node->ternary_op.else_expression);
-    CodeGen_Emit(ctx, L"))");
+    CodeGen_Emit(ctx, "))");
 }
 
 static void CodeGen_GenerateExpression(const CodeGenContext ctx, const ASTNode *node) {
@@ -244,7 +234,7 @@ static void CodeGen_GenerateExpression(const CodeGenContext ctx, const ASTNode *
             CodeGen_GenerateLiteral(ctx, node);
             break;
         case AST_VAR_REF:
-            CodeGen_EmitFormat(ctx, L"%ls", node->var_ref.var_name);
+            CodeGen_EmitFormat(ctx, "%s", node->var_ref.var_name);
             break;
         case AST_TYPE_CAST:
             CodeGen_GenerateTypeCast(ctx, node);
@@ -259,7 +249,7 @@ static void CodeGen_GenerateExpression(const CodeGenContext ctx, const ASTNode *
             CodeGen_GenerateTernary(ctx, node);
             break;
         default:
-            CodeGen_EmitFormat(ctx, L"/* unknown expression, typeof = '%ls' */", ASTNodeType_String(node->type));
+            CodeGen_EmitFormat(ctx, "/* unknown expression, typeof = '%s' */", ASTNodeType_String(node->type));
             break;
     }
 }
@@ -267,20 +257,20 @@ static void CodeGen_GenerateExpression(const CodeGenContext ctx, const ASTNode *
 static void CodeGen_GenerateVarDeclaration(const CodeGenContext ctx, const ASTNode *node, const int indent_level) {
     DEBUG_ASSERT(node->type == AST_VAR_DECL);
 
-    const wchar_t *c_var_type = CodeGen_CTypeString(node->var_decl.var_type);
-    const wchar_t *var_name = node->var_decl.var_name;
+    const char *c_var_type = CodeGen_CTypeString(node->var_decl.var_type);
+    const char *var_name = node->var_decl.var_name;
     const ASTNode *init_expr = (const ASTNode *) node->var_decl.init_value;
 
     CodeGen_EmitIndent(ctx, indent_level);
     if (init_expr == NULL) {
         // <ctype> <var_name>;
-        CodeGen_EmitFormat(ctx, L"%ls %ls;\n", c_var_type, var_name);
+        CodeGen_EmitFormat(ctx, "%s %s;\n", c_var_type, var_name);
         return;
     }
 
-    CodeGen_EmitFormat(ctx, L"%ls %ls = ", c_var_type, var_name);
+    CodeGen_EmitFormat(ctx, "%s %s = ", c_var_type, var_name);
     CodeGen_GenerateExpression(ctx, init_expr);
-    CodeGen_Emit(ctx, L";\n");
+    CodeGen_Emit(ctx, ";\n");
 }
 
 static void CodeGen_GenerateIfStatement(const CodeGenContext ctx, const ASTNode *node, const int indent_level) {
@@ -292,14 +282,14 @@ static void CodeGen_GenerateIfStatement(const CodeGenContext ctx, const ASTNode 
 
     // if (<condition>)
     CodeGen_EmitIndent(ctx, indent_level);
-    CodeGen_Emit(ctx, L"if (");
+    CodeGen_Emit(ctx, "if (");
     CodeGen_GenerateExpression(ctx, condition);
-    CodeGen_Emit(ctx, L")\n");
+    CodeGen_Emit(ctx, ")\n");
     // then block
     CodeGen_GenerateStatement(ctx, then_block, then_block->type != AST_BLOCK ? indent_level + 1 : indent_level);
     // else block
     if (else_block == NULL) return;
-    CodeGen_EmitLine(ctx, indent_level, L"else");
+    CodeGen_EmitLine(ctx, indent_level, "else");
     CodeGen_GenerateStatement(ctx, else_block, else_block->type != AST_BLOCK ? indent_level + 1 : indent_level);
 }
 
@@ -308,11 +298,11 @@ static void CodeGen_GenerateBlock(const CodeGenContext ctx, const ASTNode *node,
 
     const ASTNode *statement = (const ASTNode *) node->block.statements;
 
-    CodeGen_EmitLine(ctx, indent_level, L"{");
+    CodeGen_EmitLine(ctx, indent_level, "{");
     for (const ASTNode *current = statement; current != NULL; current = (const ASTNode *) current->next_node) {
         CodeGen_GenerateStatement(ctx, current, indent_level + 1);
     }
-    CodeGen_EmitLine(ctx, indent_level, L"}");
+    CodeGen_EmitLine(ctx, indent_level, "}");
 }
 
 static VValueType GetNodeExpressionType(const ASTNode *node) {
@@ -332,16 +322,16 @@ static VValueType GetNodeExpressionType(const ASTNode *node) {
     }
 }
 
-static const wchar_t *GetNodePrintfFormat(const ASTNode *node) {
+static const char *GetNodePrintfFormat(const ASTNode *node) {
     switch (GetNodeExpressionType(node)) {
         case VALUE_I64:
-            return L"%lld";
+            return "%lld";
         case VALUE_F64:
-            return L"%f";
-        case VALUE_WSTR:
-            return L"%ls";
+            return "%f";
+        case VALUE_STR:
+            return "%s";
         default:
-            return L"";
+            return "";
     }
 }
 
@@ -351,9 +341,9 @@ static void CodeGen_GeneratePrintStatement(const CodeGenContext ctx, const ASTNo
     const ASTNode *expressions = (const ASTNode *) node->print_stmt.expressions;
     for (const ASTNode *current = expressions; current != NULL; current = (const ASTNode *) current->next_node) {
         CodeGen_EmitIndent(ctx, indent_level);
-        CodeGen_EmitFormat(ctx, L"printf(\"%ls\", ", GetNodePrintfFormat(current));
+        CodeGen_EmitFormat(ctx, "printf(\"%s\", ", GetNodePrintfFormat(current));
         CodeGen_GenerateExpression(ctx, current);
-        CodeGen_Emit(ctx, L");\n");
+        CodeGen_Emit(ctx, ");\n");
     }
 }
 
@@ -374,25 +364,25 @@ static void CodeGen_GenerateStatement(const CodeGenContext ctx, const ASTNode *n
         default:
             CodeGen_EmitIndent(ctx, indent_level);
             CodeGen_GenerateExpression(ctx, node);
-            CodeGen_Emit(ctx, L";\n");
+            CodeGen_Emit(ctx, ";\n");
             break;
     }
 }
 
 static void CodeGen_GeneratePrelude(const CodeGenContext ctx) {
-    CodeGen_EmitLine(ctx, 0, L"#include <stdlib.h>");
-    CodeGen_EmitLine(ctx, 0, L"#include <stdio.h>");
-    CodeGen_EmitLine(ctx, 0, L"#include <math.h>");
-    CodeGen_Emit(ctx, L"\n");
+    CodeGen_EmitLine(ctx, 0, "#include <stdlib.h>");
+    CodeGen_EmitLine(ctx, 0, "#include <stdio.h>");
+    CodeGen_EmitLine(ctx, 0, "#include <math.h>");
+    CodeGen_Emit(ctx, "\n");
 }
 
 static void CodeGen_GenerateMain(const CodeGenContext ctx, const ASTNode *statement) {
-    CodeGen_EmitLine(ctx, 0, L"int main(int argc, const char** argv) {");
+    CodeGen_EmitLine(ctx, 0, "int main(int argc, const char** argv) {");
     for (const ASTNode *current = statement; current != NULL; current = (const ASTNode *) current->next_node) {
         CodeGen_GenerateStatement(ctx, current, 1);
     }
-    CodeGen_EmitLine(ctx, 1, L"return 0;");
-    CodeGen_EmitLine(ctx, 0, L"}");
+    CodeGen_EmitLine(ctx, 1, "return 0;");
+    CodeGen_EmitLine(ctx, 0, "}");
 }
 
 void CodeGen_GenerateFromAST(const CodeGenContext ctx, const ASTNode *module) {

@@ -4,7 +4,6 @@
 
 #ifndef VISMUT_CALLSTACK_H
 #define VISMUT_CALLSTACK_H
-#include <wchar.h>
 #include "../debug.h"
 
 #if DEBUG
@@ -14,12 +13,12 @@ typedef struct {
     const char *function_name;
     const char *file_name;
     int line_number;
-    const wchar_t *additional_info;
+    const char *additional_info;
 } CallStackEntry;
 
 void CallStack_Init(void);
 
-void CallStack_Push(const char *func, const char *file, int line, const wchar_t *info);
+void CallStack_Push(const char *func, const char *file, int line, const char *info);
 
 void CallStack_Pop(void);
 

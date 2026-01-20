@@ -32,6 +32,6 @@ typedef struct {
     VismutError error;
 } VismutErrorInfo;
 
-const wchar_t *GetErrorString(errno_t);
+const char *GetErrorString(errno_t);
 
 #endif //VISMUT_ERRORS_H

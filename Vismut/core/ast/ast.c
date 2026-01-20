@@ -9,82 +9,82 @@ void ASTNode_Print(const ASTNode *node) {
 
 static void print_value(const VValue *value) {
     if (!value) {
-        wprintf(L"<NULL>");
+        printf("<NULL>");
         return;
     }
 
     switch (value->type) {
         case VALUE_VOID:
             ansi_set_color(ANSI_COLOR_MAGENTA);
-            wprintf(L"void");
+            printf("void");
             break;
         case VALUE_AUTO:
             ansi_set_color(ANSI_COLOR_MAGENTA);
-            wprintf(L"auto");
+            printf("auto");
             break;
         case VALUE_I64:
             ansi_set_color(ANSI_COLOR_BRIGHT_BLUE);
-            wprintf(L"%lld", value->i64);
+            printf("%lld", value->i64);
             break;
         case VALUE_F64:
             ansi_set_color(ANSI_COLOR_BRIGHT_BLUE);
-            wprintf(L"%f", value->f64);
+            printf("%f", value->f64);
             break;
-        case VALUE_WSTR:
+        case VALUE_STR:
             ansi_set_color(ANSI_COLOR_BRIGHT_GREEN);
-            wprintf(L"\"%ls\"", value->wstr);
+            printf("\"%s\"", value->str);
             break;
         default:
-            wprintf(L"<unknown value type>");
+            printf("<unknown value type>");
     }
 }
 
 static void print_indent(const int ident) {
     for (int i = 0; i < ident; ++i) {
         if (i % 2 == 0) {
-            PRINT_FG(ANSI_COLOR_WHITE, L"|   ");
+            PRINT_FG(ANSI_COLOR_WHITE, "|   ");
         } else {
-            PRINT_STYLED(ANSI_COLOR_WHITE, ANSI_BG_BLACK, ANSI_UNDERLINE, L"|");
-            PRINT_FG(ANSI_COLOR_WHITE, L"   ");
+            PRINT_STYLED(ANSI_COLOR_WHITE, ANSI_BG_BLACK, ANSI_UNDERLINE, "|");
+            PRINT_FG(ANSI_COLOR_WHITE, "   ");
         }
     }
 }
 
 #define PRINT_EXPR_TYPE(EXPR_TYPE) \
     do { \
-        wprintf(L" (");\
+        printf(" (");\
         PRINT_FG(ANSI_COLOR_CYAN, VValueType_String(EXPR_TYPE));\
-        wprintf(L")");\
+        printf(")");\
     }\
     while (0)
 
 #define PRINT_PURE(IS_PURE) \
     do { \
         if (IS_PURE) { \
-            PRINT_FG(ANSI_COLOR_GREEN, L" pure"); \
+            PRINT_FG(ANSI_COLOR_GREEN, " pure"); \
         } else {\
-            PRINT_FG(ANSI_COLOR_RED, L" !pure"); \
+            PRINT_FG(ANSI_COLOR_RED, " !pure"); \
         }\
     } while (0)
 
 #define PRINT_NODE_POS(node_ptr) \
     do {\
         ansi_set_color(ANSI_COLOR_WHITE); \
-        wprintf(L" ["); \
+        printf(" ["); \
         ansi_set_color(ANSI_COLOR_BRIGHT_RED); \
-        wprintf(L"%zu", (node_ptr)->pos.offset); \
+        printf("%zu", (node_ptr)->pos.offset); \
         ansi_set_color(ANSI_COLOR_WHITE);\
-        wprintf(L"-"); \
+        printf("-"); \
         ansi_set_color(ANSI_COLOR_BRIGHT_RED); \
-        wprintf(L"%zu", (node_ptr)->pos.offset + (node_ptr)->pos.length); \
+        printf("%zu", (node_ptr)->pos.offset + (node_ptr)->pos.length); \
         ansi_set_color(ANSI_COLOR_WHITE); \
-        wprintf(L"]\n");\
+        printf("]\n");\
     } while (0)
 
 static void ASTNode_PrintNode(const ASTNode *node, const int depth) {
     if (!node) {
         print_indent(depth);
-        wprintf(L"<NULL>\n");
+        printf("<NULL>\n");
         return;
     }
 
@@ -93,7 +93,7 @@ static void ASTNode_PrintNode(const ASTNode *node, const int depth) {
     PRINT_FG(ANSI_COLOR_BRIGHT_MAGENTA, ASTNodeType_String(node->type));
     switch (node->type) {
         case AST_LITERAL:
-            wprintf(L" ");
+            printf(" ");
             print_value(&node->literal);
             ansi_reset();
             PRINT_EXPR_TYPE(node->literal.type);
@@ -101,28 +101,28 @@ static void ASTNode_PrintNode(const ASTNode *node, const int depth) {
             break;
 
         case AST_VAR_REF:
-            wprintf(L" ");
-            PRINT_FG(ANSI_COLOR_BRIGHT_YELLOW, node->var_ref.var_name ? node->var_ref.var_name : L"<NULL>");
+            printf(" ");
+            PRINT_FG(ANSI_COLOR_BRIGHT_YELLOW, node->var_ref.var_name ? node->var_ref.var_name : "<NULL>");
             PRINT_EXPR_TYPE(node->var_ref.expr_type);
             PRINT_NODE_POS(node);
             break;
 
         case AST_BINARY:
-            wprintf(L" ");
+            printf(" ");
             PRINT_FG(ANSI_COLOR_GREEN, ASTBinaryType_String(node->binary_op.op));
             PRINT_EXPR_TYPE(node->binary_op.expr_type);
             PRINT_PURE(node->binary_op.is_pure);
             PRINT_NODE_POS(node);
             print_indent(depth + 1);
-            PRINT_FG(ANSI_COLOR_YELLOW, L"left\n");
+            PRINT_FG(ANSI_COLOR_YELLOW, "left\n");
             ASTNode_PrintNode((const ASTNode *) node->binary_op.left, depth + 2);
             print_indent(depth + 1);
-            PRINT_FG(ANSI_COLOR_YELLOW, L"right\n");
+            PRINT_FG(ANSI_COLOR_YELLOW, "right\n");
             ASTNode_PrintNode((const ASTNode *) node->binary_op.right, depth + 2);
             break;
 
         case AST_UNARY:
-            wprintf(L" ");
+            printf(" ");
             PRINT_FG(ANSI_COLOR_GREEN, ASTUnaryType_String(node->unary_op.op));
             PRINT_EXPR_TYPE(node->unary_op.expr_type);
             PRINT_PURE(node->unary_op.is_pure);
@@ -137,23 +137,23 @@ static void ASTNode_PrintNode(const ASTNode *node, const int depth) {
             ASTNode_PrintNode((const ASTNode *) node->ternary_op.condition, depth + 1);
 
             print_indent(depth + 1);
-            PRINT_FG(ANSI_COLOR_YELLOW, L"then\n");
+            PRINT_FG(ANSI_COLOR_YELLOW, "then\n");
             ASTNode_PrintNode((const ASTNode *) node->ternary_op.then_expression, depth + 2);
 
             print_indent(depth + 1);
-            PRINT_FG(ANSI_COLOR_YELLOW, L"else\n");
+            PRINT_FG(ANSI_COLOR_YELLOW, "else\n");
             ASTNode_PrintNode((const ASTNode *) node->ternary_op.else_expression, depth + 2);
             break;
         case AST_VAR_DECL:
-            wprintf(L" ");
-            PRINT_FG(ANSI_COLOR_BRIGHT_YELLOW, node->var_decl.var_name ? node->var_decl.var_name : L"<NULL>");
+            printf(" ");
+            PRINT_FG(ANSI_COLOR_BRIGHT_YELLOW, node->var_decl.var_name ? node->var_decl.var_name : "<NULL>");
             PRINT_EXPR_TYPE(node->var_decl.var_type);
             PRINT_NODE_POS(node);
             if (node->var_decl.init_value) {
                 print_indent(depth + 1);
-                PRINT_FG(ANSI_COLOR_YELLOW, L"init");
+                PRINT_FG(ANSI_COLOR_YELLOW, "init");
                 PRINT_EXPR_TYPE(node->var_decl.init_value_type);
-                wprintf(L"\n");
+                printf("\n");
                 ASTNode_PrintNode((const ASTNode *) node->var_decl.init_value, depth + 2);
             }
             break;
@@ -173,11 +173,11 @@ static void ASTNode_PrintNode(const ASTNode *node, const int depth) {
             PRINT_NODE_POS(node);
             ASTNode_PrintNode((const ASTNode *) node->if_stmt.condition, depth + 1);
             print_indent(depth + 1);
-            PRINT_FG(ANSI_COLOR_YELLOW, L"then\n");
+            PRINT_FG(ANSI_COLOR_YELLOW, "then\n");
             ASTNode_PrintNode((const ASTNode *) node->if_stmt.then_block, depth + 2);
             if (node->if_stmt.else_block) {
                 print_indent(depth + 1);
-                PRINT_FG(ANSI_COLOR_YELLOW, L"else\n");
+                PRINT_FG(ANSI_COLOR_YELLOW, "else\n");
                 ASTNode_PrintNode((const ASTNode *) node->if_stmt.else_block, depth + 2);
             }
             break;
@@ -185,16 +185,16 @@ static void ASTNode_PrintNode(const ASTNode *node, const int depth) {
         case AST_WHILE_STMT:
             PRINT_NODE_POS(node);
             print_indent(depth + 1);
-            wprintf(L"condition:\n");
+            printf("condition:\n");
             ASTNode_PrintNode((const ASTNode *) node->while_stmt.condition, depth + 2);
             print_indent(depth + 1);
-            wprintf(L"body:\n");
+            printf("body:\n");
             ASTNode_PrintNode((const ASTNode *) node->while_stmt.body, depth + 2);
             break;
 
         case AST_TYPE_CAST:
             PRINT_EXPR_TYPE(node->type_cast.from_type);
-            PRINT_FG(ANSI_COLOR_YELLOW, L" ->");
+            PRINT_FG(ANSI_COLOR_YELLOW, " ->");
             PRINT_EXPR_TYPE(node->type_cast.target_type);
             PRINT_PURE(node->type_cast.is_pure);
             PRINT_NODE_POS(node);
@@ -210,18 +210,17 @@ static void ASTNode_PrintNode(const ASTNode *node, const int depth) {
             break;
 
         case AST_MODULE:
-            wprintf(L" ");
+            printf(" ");
             ansi_set_color(ANSI_COLOR_BLACK);
             ansi_set_bg_color(ANSI_BG_WHITE);
-            wprintf(L"%ls",
-                    node->module.module_name ? node->module.module_name : L"<unnamed>");
+            printf("%s", node->module.module_name ? node->module.module_name : "<unnamed>");
             ansi_reset();
             PRINT_NODE_POS(node);
 
             if (node->module.functions) {
                 print_indent(depth + 1);
-                ansi_print_styled(ANSI_COLOR_WHITE, ANSI_BG_BLACK, ANSI_UNDERLINE, L"functions");
-                wprintf(L"\n");
+                ansi_print_styled(ANSI_COLOR_WHITE, ANSI_BG_BLACK, ANSI_UNDERLINE, "functions");
+                printf("\n");
                 for (const ASTNode *current = (ASTNode *) node->module.functions; current != NULL;
                      current = (ASTNode *) current->next_node) {
                     ASTNode_PrintNode(current, depth + 2);
@@ -229,8 +228,8 @@ static void ASTNode_PrintNode(const ASTNode *node, const int depth) {
             }
             if (node->module.statements) {
                 print_indent(depth + 1);
-                ansi_print_styled(ANSI_COLOR_WHITE, ANSI_BG_BLACK, ANSI_UNDERLINE, L"statements");
-                wprintf(L"\n");
+                ansi_print_styled(ANSI_COLOR_WHITE, ANSI_BG_BLACK, ANSI_UNDERLINE, "statements");
+                printf("\n");
                 for (const ASTNode *current = (ASTNode *) node->module.statements; current != NULL;
                      current = (ASTNode *) current->next_node) {
                     ASTNode_PrintNode(current, depth + 2);
@@ -238,17 +237,17 @@ static void ASTNode_PrintNode(const ASTNode *node, const int depth) {
             }
             break;
         case AST_UNKNOWN:
-            wprintf(L" <unknown node>");
+            printf(" <unknown node>");
             break;
         case AST_FUNCTION_DECL:
-            wprintf(L" <function decl>");
+            printf(" <function decl>");
             break;
         case AST_FUNCTION_CALL:
-            wprintf(L" <function call>");
+            printf(" <function call>");
             break;
         case AST_COUNT:
         default:
-            wprintf(L" <unhandled node type>\n");
+            printf(" <unhandled node type>\n");
             break;
     }
 }
@@ -265,7 +264,7 @@ ASTNode *CreateLiteralNode(Arena *arena, const Position pos, const VValue value)
     return node;
 }
 
-ASTNode *CreateVarRefNode(Arena *arena, const Position pos, const wchar_t *var_name) {
+ASTNode *CreateVarRefNode(Arena *arena, const Position pos, const char *var_name) {
     ASTNode *node = Arena_Type(arena, ASTNode);
     *node = (ASTNode){
         .type = AST_VAR_REF,
@@ -330,7 +329,7 @@ ASTNode *CreateIfStatementNode(Arena *arena, const Position pos, const ASTNode *
     return node;
 }
 
-ASTNode *CreateVarDeclarationNode(Arena *arena, const Position pos, const wchar_t *var_name,
+ASTNode *CreateVarDeclarationNode(Arena *arena, const Position pos, const char *var_name,
                                   const VValueType var_type, const ASTNode *init_value) {
     ASTNode *node = Arena_Type(arena, ASTNode);
     *node = (ASTNode){
@@ -383,7 +382,7 @@ ASTNode *CreateTernaryNode(Arena *arena, const Position pos, const ASTNode *cond
     return node;
 }
 
-ASTNode *CreateModuleNode(Arena *arena, const wchar_t *module_name, Scope *scope) {
+ASTNode *CreateModuleNode(Arena *arena, const char *module_name, Scope *scope) {
     ASTNode *node = Arena_Type(arena, ASTNode);
     *node = (ASTNode){
         .type = AST_MODULE,

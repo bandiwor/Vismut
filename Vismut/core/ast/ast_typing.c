@@ -43,7 +43,7 @@ typedef struct {
 
 #define INT VALUE_I64
 #define FLOAT VALUE_F64
-#define STR VALUE_WSTR
+#define STR VALUE_STR
 
 BEGIN_BINARY_RULES(binary_op_rules)
     BINARY_OP(

@@ -9,7 +9,7 @@
 #include "ast.h"
 
 typedef struct {
-    const wchar_t *source;
+    const char *source;
     size_t source_length;
     Arena *arena;
     Tokenizer *tokenizer;

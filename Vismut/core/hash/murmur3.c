@@ -62,51 +62,6 @@ uint32_t murmurhash3_string(const char *str, const uint32_t seed) {
     return murmurhash3_32(str, strlen(str), seed);
 }
 
-// Оптимизированная версия для wide-строк
-uint32_t murmurhash3_wstring(const wchar_t *str, const uint32_t seed) {
-    if (!str) return 0;
-
-    // Быстрая реализация для строк, которые часто короткие
-    uint32_t h1 = seed;
-    const wchar_t *p = str;
-
-    while (*p) {
-        uint32_t k1 = (uint32_t) (*p++);
-
-        // Обрабатываем UTF-16 (wchar_t в Windows обычно 2 байта)
-#ifdef _WIN32
-        // Для surrogate pairs в UTF-16
-        if (k1 >= 0xD800 && k1 <= 0xDBFF) {
-            if (*p >= 0xDC00 && *p <= 0xDFFF) {
-                k1 = 0x10000 + ((k1 - 0xD800) << 10) + (*p - 0xDC00);
-                p++;
-            }
-        }
-#endif
-
-        k1 *= MURMUR3_C1;
-        k1 = (k1 << MURMUR3_R1) | (k1 >> (32 - MURMUR3_R1));
-        k1 *= MURMUR3_C2;
-
-        h1 ^= k1;
-        h1 = (h1 << MURMUR3_R2) | (h1 >> (32 - MURMUR3_R2));
-        h1 = h1 * MURMUR3_M + MURMUR3_N;
-    }
-
-    // Подсчет длины в символах (не в байтах)
-    const size_t len = (size_t) (p - str);
-
-    // Финальный микс
-    h1 ^= (uint32_t) len;
-    h1 ^= h1 >> 16;
-    h1 *= 0x85ebca6b;
-    h1 ^= h1 >> 13;
-    h1 *= 0xc2b2ae35;
-    h1 ^= h1 >> 16;
-
-    return h1;
-}
-
 // Хеширование 64-битного целого
 uint32_t murmurhash3_int64(const int64_t value, const uint32_t seed) {
     uint32_t h1 = seed;

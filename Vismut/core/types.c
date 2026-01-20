@@ -5,9 +5,8 @@
 #define TOSTRING(x) STRINGIFY(x)
 
 #define CREATE_MAP_TO_STRING_FUNCTION(ENUM_NAME, MAP_NAME, COUNT_NAME, UNKNOWN_NAME) \
-    attribute_const \
-    const wchar_t* ENUM_NAME##_String(const ENUM_NAME type) { \
-        static const wchar_t *names[] = { \
+    const char* ENUM_NAME##_String(const ENUM_NAME type) { \
+        static const char *names[] = { \
             MAP_NAME(ELEMENT_VALUE_FOR_MAP_ARRAY_INIT) \
         }; \
         if (unlikely(type >= COUNT_NAME)) { \

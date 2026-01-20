@@ -8,16 +8,18 @@
 #include "../memory/arena.h"
 
 typedef struct {
-    wchar_t *source_filename;
-    const wchar_t *source;
+    const char *source_filename;
+    const char *source;
+    char *buffer;
+    size_t buffer_size;
     size_t source_length;
     Arena *arena;
     size_t start_token_position;
     size_t current_position;
-    wchar_t current_char;
+    char current_char;
 } Tokenizer;
 
-Tokenizer Tokenizer_Create(const wchar_t *source, size_t source_length, wchar_t *source_filename, Arena *);
+Tokenizer Tokenizer_Create(const char *source, size_t source_length, const char *source_filename, Arena *);
 
 void Tokenizer_Reset(Tokenizer *);
 

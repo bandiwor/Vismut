@@ -11,11 +11,17 @@
 #include "../errors/errors.h"
 
 attribute_cold
-Tokenizer Tokenizer_Create(const wchar_t *source, const size_t source_length, wchar_t *source_filename,
+Tokenizer Tokenizer_Create(const char *source, const size_t source_length, const char *source_filename,
                            Arena *arena) {
+    const size_t buffer_size = 256;
+    char *buffer = Arena_Array(arena, char, buffer_size);
+    memset(buffer, 0, sizeof(char) * buffer_size);
+
     Tokenizer tokenizer = {
         .source = source,
         .source_length = source_length,
+        .buffer = buffer,
+        .buffer_size = buffer_size,
         .start_token_position = 0,
         .current_position = 0,
         .current_char = 0,
@@ -38,27 +44,20 @@ void Tokenizer_Reset(Tokenizer *tokenizer) {
     }
 }
 
-attribute_const attribute_hot
-static bool IsSpace(const wchar_t c) {
-    return c == L' ' || c == L'\n' || c == L'\t' || c == L'\r' || c == L'\r';
+attribute_hot
+static bool IsSpace(const char c) {
+    return c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '\b' || c == '\v';
 }
 
-attribute_const
-static bool IsDigit(const wchar_t c) {
-    return c >= L'0' && c <= L'9';
+static bool IsDigit(const char c) {
+    return c >= '0' && c <= '9';
 }
 
-attribute_const attribute_hot
-static bool IsAlphaOrUnderscore(const wchar_t c) {
-    return ((c >= L'a' && c <= L'z') || // Частые строчные латинские
-            (c == L'_') || // Подчеркивание
-            (c >= L'A' && c <= L'Z') || // Заглавные латинские
-            (c >= 0x410 && c <= 0x44F) || // Кириллица (основной блок)
-            (c == 0x401 || c == 0x451) || // Ё и ё
-            ((c & 0xFFE0) == 0x0400) || // Расширенная кириллица (0400-04FF)
-            ((c >= 0x370 && c <= 0x3FF)) || // Греческие буквы
-            ((c & 0xF800) == 0x3000) // Общий диапазон CJK иероглифов
-    );
+attribute_hot
+static bool IsASCIIAlphaOrUnderscore(const char c) {
+    return (c >= 'a' && c <= 'z')
+           || (c == '_')
+           || (c >= 'A' && c <= 'Z');
 }
 
 attribute_hot
@@ -66,9 +65,9 @@ static void Tokenizer_Advance(Tokenizer *tokenizer) {
     DEBUG_ASSERT(tokenizer != NULL);
 
     if (likely(tokenizer->current_position + 1 < tokenizer->source_length)) {
-        tokenizer->current_char = tokenizer->source[tokenizer->current_position++ + 1];
+        tokenizer->current_char = tokenizer->source[++tokenizer->current_position];
     } else {
-        tokenizer->current_char = L'\0';
+        tokenizer->current_char = '\0';
     }
 }
 
@@ -92,27 +91,31 @@ static void Tokenizer_DoubleAdvance(Tokenizer *tokenizer) {
 }
 
 attribute_pure
-static wchar_t Tokenizer_NextChar(const Tokenizer *tokenizer) {
+static char Tokenizer_NextChar(const Tokenizer *tokenizer) {
     DEBUG_ASSERT(tokenizer != NULL);
 
     if (likely(tokenizer->current_position + 1 < tokenizer->source_length)) {
         return tokenizer->source[tokenizer->current_position + 1];
     }
 
-    return L'\0';
+    return '\0';
 }
 
 static void Tokenizer_SkipSingleComment(Tokenizer *tokenizer) {
     DEBUG_ASSERT(tokenizer != NULL);
     DEBUG_LOG_ASSERT(
-        tokenizer->current_char == L'/' && Tokenizer_NextChar(tokenizer) == L'/',
-        L"current char and next char must to be equal '/'"
+        tokenizer->current_char == '/' && Tokenizer_NextChar(tokenizer) == '/',
+        "current char and next char must to be equal '/'"
     );
 
     // Skip '//'
     Tokenizer_DoubleAdvance(tokenizer);
     // Skip line
-    while (tokenizer->current_char != L'\n' && tokenizer->current_char != L'\0') {
+    while (tokenizer->current_char != '\n' && tokenizer->current_char != '\0') {
+        if (tokenizer->current_char == '\r' && Tokenizer_NextChar(tokenizer) == '\n') {
+            Tokenizer_DoubleAdvance(tokenizer);
+            return;
+        }
         Tokenizer_Advance(tokenizer);
     }
     // Skip '\n'
@@ -122,8 +125,8 @@ static void Tokenizer_SkipSingleComment(Tokenizer *tokenizer) {
 static void Tokenizer_SkipMultiLineComment(Tokenizer *tokenizer) {
     DEBUG_ASSERT(tokenizer != NULL);
     DEBUG_LOG_ASSERT(
-        tokenizer->current_char == L'/' && Tokenizer_NextChar(tokenizer) == L'*',
-        L"current char must to be equal '/', next char must to be equal '*'"
+        tokenizer->current_char == '/' && Tokenizer_NextChar(tokenizer) == '*',
+        "current char must to be equal '/', next char must to be equal '*'"
     );
 
     // Skip '/*'
@@ -142,7 +145,7 @@ static void Tokenizer_SkipMultiLineComment(Tokenizer *tokenizer) {
 }
 
 attribute_pure
-static VTokenType Tokenizer_GetKeyword(const wchar_t *buffer,
+static VTokenType Tokenizer_GetKeyword(const char *buffer,
                                        const size_t length) {
 #define COMPARE_3(c1, c2, c3, token)                                           \
   do {                                                                         \
@@ -151,9 +154,9 @@ static VTokenType Tokenizer_GetKeyword(const wchar_t *buffer,
   } while (0)
 
     if (length == 3) {
-        COMPARE_3(L'i', L'6', L'4', TOKEN_I64_TYPE);
-        COMPARE_3(L'f', L'6', L'4', TOKEN_FLOAT_TYPE);
-        COMPARE_3(L's', L't', L'r', TOKEN_STRING_TYPE);
+        COMPARE_3('i', '6', '4', TOKEN_I64_TYPE);
+        COMPARE_3('f', '6', '4', TOKEN_FLOAT_TYPE);
+        COMPARE_3('s', 't', 'r', TOKEN_STRING_TYPE);
         return TOKEN_UNKNOWN;
     }
 
@@ -162,18 +165,19 @@ static VTokenType Tokenizer_GetKeyword(const wchar_t *buffer,
 #undef COMPARE_3
 }
 
-static errno_t Tokenizer_ScanIdentifierIntoBuffer(Tokenizer *tokenizer, wchar_t *buffer, const size_t buffer_size,
-                                                  size_t *keyword_length) {
-    size_t length = 1;
-    buffer[0] = tokenizer->current_char;
+static errno_t Tokenizer_ScanIdentifierIntoBuffer(Tokenizer *tokenizer, size_t *keyword_length) {
+    DEBUG_ASSERT(IsASCIIAlphaOrUnderscore(tokenizer->current_char));
+
+    size_t length = 0;
+    tokenizer->buffer[length++] = tokenizer->current_char;
 
     Tokenizer_Advance(tokenizer);
 
-    while (IsAlphaOrUnderscore(tokenizer->current_char) || IsDigit(tokenizer->current_char)) {
-        if (length >= buffer_size) {
+    while (IsASCIIAlphaOrUnderscore(tokenizer->current_char) || IsDigit(tokenizer->current_char)) {
+        if (length >= tokenizer->buffer_size) {
             return VISMUT_ERROR_BUFFER_OVERFLOW;
         }
-        buffer[length++] = tokenizer->current_char;
+        tokenizer->buffer[length++] = tokenizer->current_char;
         Tokenizer_Advance(tokenizer);
     }
 
@@ -184,31 +188,30 @@ static errno_t Tokenizer_ScanIdentifierIntoBuffer(Tokenizer *tokenizer, wchar_t 
 static errno_t Tokenizer_ParseIdentifier(Tokenizer *tokenizer, VToken *token) {
     DEBUG_ASSERT(tokenizer != NULL);
     DEBUG_ASSERT(token != NULL);
-    DEBUG_ASSERT(IsAlphaOrUnderscore(tokenizer->current_char));
+    DEBUG_ASSERT(IsASCIIAlphaOrUnderscore(tokenizer->current_char));
 
-    static wchar_t buffer[128] = {0};
     size_t keyword_length;
 
     errno_t err;
-    if ((err = Tokenizer_ScanIdentifierIntoBuffer(tokenizer, buffer, _countof(buffer), &keyword_length)) !=
-        VISMUT_ERROR_OK) {
-        return err;
-    }
+    RISKY_EXPRESSION_SAFE(
+        Tokenizer_ScanIdentifierIntoBuffer(tokenizer, &keyword_length),
+        err
+    );
 
     token->position.length = keyword_length;
 
     VTokenType keyword_type;
-    if ((keyword_type = Tokenizer_GetKeyword(buffer, keyword_length)) != TOKEN_UNKNOWN) {
+    if ((keyword_type = Tokenizer_GetKeyword(tokenizer->buffer, keyword_length)) != TOKEN_UNKNOWN) {
         token->type = keyword_type;
         return VISMUT_ERROR_OK;
     }
 
-    wchar_t *identifier = Arena_Array(tokenizer->arena, wchar_t, keyword_length + 1);
-    wmemcpy_s(identifier, keyword_length, buffer, keyword_length);
+    char *identifier = Arena_Array(tokenizer->arena, char, keyword_length + 1);
+    memcpy(identifier, tokenizer->buffer, keyword_length);
     identifier[keyword_length] = L'\0';
 
     token->type = TOKEN_IDENTIFIER;
-    token->data.w_chars = identifier;
+    token->data.chars = identifier;
 
     return VISMUT_ERROR_OK;
 }
@@ -218,10 +221,10 @@ static errno_t Tokenizer_ParseNumber(Tokenizer *tokenizer, VToken *token) {
     DEBUG_ASSERT(token != NULL);
     DEBUG_ASSERT(
         IsDigit(tokenizer->current_char) ||
-        (tokenizer->current_char == L'-' && IsDigit(Tokenizer_NextChar(tokenizer))))
+        (tokenizer->current_char == '-' && IsDigit(Tokenizer_NextChar(tokenizer))))
     ;
 
-    static wchar_t buffer[128] = {0};
+    static char buffer[128] = {0};
     const size_t start_position = tokenizer->current_position;
     size_t buffer_length = 1;
 
@@ -236,22 +239,22 @@ static errno_t Tokenizer_ParseNumber(Tokenizer *tokenizer, VToken *token) {
     int base = 10;
     bool has_point = false, has_exponent = false;
 
-    if (buffer[0] == L'0') {
+    if (buffer[0] == '0') {
         switch (tokenizer->current_char) {
-            case L'x':
-            case L'X':
+            case 'x':
+            case 'X':
                 base = 16;
                 buffer_length = 0;
                 Tokenizer_Advance(tokenizer);
                 break;
-            case L'o':
-            case L'O':
+            case 'o':
+            case 'O':
                 base = 8;
                 buffer_length = 0;
                 Tokenizer_Advance(tokenizer);
                 break;
-            case L'b':
-            case L'B':
+            case 'b':
+            case 'B':
                 base = 2;
                 buffer_length = 0;
                 Tokenizer_Advance(tokenizer);
@@ -261,31 +264,31 @@ static errno_t Tokenizer_ParseNumber(Tokenizer *tokenizer, VToken *token) {
         }
     }
 
-    while (tokenizer->current_char != L'\0') {
+    while (tokenizer->current_char != '\0') {
         if (unlikely(buffer_length + 1 >= _countof(buffer))) {
             return VISMUT_ERROR_BUFFER_OVERFLOW;
         }
 
-        wchar_t c = tokenizer->current_char;
+        char c = tokenizer->current_char;
         bool is_valid = false;
 
         if (base == 16) {
-            is_valid = (c >= L'A' && c <= L'F') || (c >= L'a' && c <= L'f');
+            is_valid = (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
         } else if (base == 8) {
-            is_valid = c >= L'0' && c <= L'7';
+            is_valid = c >= '0' && c <= '7';
         } else if (base == 2) {
-            is_valid = c == L'0' || c == L'1';
+            is_valid = c == '0' || c == '1';
         } else {
             is_valid = true;
             if (c >= L'0' && c <= L'9') {
             } else if (c == L'.' && !has_point && !has_exponent) {
                 has_point = true;
-            } else if (towlower(c) == L'e' && !has_exponent) {
+            } else if (tolower(c) == 'e' && !has_exponent) {
                 has_exponent = true;
                 buffer[buffer_length++] = c;
                 Tokenizer_Advance(tokenizer);
                 c = tokenizer->current_char;
-                if (c == L'+' || c == L'-') {
+                if (c == '+' || c == '-') {
                     buffer[buffer_length++] = c;
                     Tokenizer_Advance(tokenizer);
                 }
@@ -299,9 +302,9 @@ static errno_t Tokenizer_ParseNumber(Tokenizer *tokenizer, VToken *token) {
         buffer[buffer_length++] = c;
         Tokenizer_Advance(tokenizer);
     }
-    buffer[buffer_length] = L'\0';
+    buffer[buffer_length] = '\0';
 
-    wchar_t *end_ptr;
+    char *end_ptr;
     errno = 0;
 
     if (base != 10) {
@@ -309,13 +312,13 @@ static errno_t Tokenizer_ParseNumber(Tokenizer *tokenizer, VToken *token) {
 
         switch (base) {
             case 2:
-                num = WStrToInt64Bin(buffer);
+                num = StrToInt64Bin(buffer);
                 break;
             case 8:
-                num = WStrToInt64Oct(buffer);
+                num = StrToInt64Oct(buffer);
                 break;
             case 16:
-                num = WStrToInt64Hex(buffer);
+                num = StrToInt64Hex(buffer);
                 break;
             default:
                 DEBUG_ASSERT("Unreachable code");
@@ -325,15 +328,15 @@ static errno_t Tokenizer_ParseNumber(Tokenizer *tokenizer, VToken *token) {
         token->data.i64 = is_negative ? -num : num;
     } else {
         if (has_point || has_exponent) {
-            const double num = wcstod(buffer, &end_ptr);
-            if (*end_ptr != L'\0' || errno == ERANGE) {
+            const double num = strtod(buffer, &end_ptr);
+            if (*end_ptr != '\0' || errno == ERANGE) {
                 return (errno == ERANGE) ? VISMUT_ERROR_NUMBER_OVERFLOW : VISMUT_ERROR_NUMBER_PARSE;
             }
             token->type = TOKEN_FLOAT_LITERAL;
             token->data.f64 = is_negative ? -num : num;
         } else {
-            const long long num = wcstoll(buffer, &end_ptr, 10);
-            if (*end_ptr != L'\0' || errno == ERANGE) {
+            const long long num = strtoll(buffer, &end_ptr, 10);
+            if (*end_ptr != '\0' || errno == ERANGE) {
                 return (errno == ERANGE) ? VISMUT_ERROR_NUMBER_OVERFLOW : VISMUT_ERROR_NUMBER_PARSE;
             }
             token->type = TOKEN_INT_LITERAL;
@@ -346,13 +349,13 @@ static errno_t Tokenizer_ParseNumber(Tokenizer *tokenizer, VToken *token) {
     return VISMUT_ERROR_OK;
 }
 
-static errno_t Tokenizer_CountStringLength(Tokenizer *tokenizer, const wchar_t string_symbol, size_t *out_length) {
+static errno_t Tokenizer_CountStringLength(Tokenizer *tokenizer, const char string_symbol, size_t *out_length) {
     const size_t start_position = tokenizer->current_position;
     size_t string_length = 0;
     bool escaped_symbol = false;
 
-    while (tokenizer->current_char != L'\0') {
-        if (tokenizer->current_char == L'\\') {
+    while (tokenizer->current_char != '\0') {
+        if (tokenizer->current_char == '\\') {
             if (!escaped_symbol) {
                 escaped_symbol = true;
                 Tokenizer_Advance(tokenizer);
@@ -362,7 +365,7 @@ static errno_t Tokenizer_CountStringLength(Tokenizer *tokenizer, const wchar_t s
             string_length++;
         } else if (tokenizer->current_char == string_symbol) {
             if (!escaped_symbol) {
-                Tokenizer_Advance(tokenizer); // Пропускаем закрывающую кавычку
+                Tokenizer_Advance(tokenizer);
                 break;
             }
             escaped_symbol = false;
@@ -370,13 +373,13 @@ static errno_t Tokenizer_CountStringLength(Tokenizer *tokenizer, const wchar_t s
         } else {
             if (escaped_symbol) {
                 switch (tokenizer->current_char) {
-                    case L'n': // newline
-                    case L't': // tab
-                    case L'r': // carriage return
-                    // case L'0':  // null character
-                    case L'"': // double quote
-                    case L'\'': // single quote
-                    case L'\\': // backslash
+                    case 'n': // newline
+                    case 't': // tab
+                    case 'r': // carriage return
+                    // case '0':  // null character
+                    case '"': // double quote
+                    case '\'': // single quote
+                    case '\\': // backslash
                         string_length++;
                         break;
                     default:
@@ -395,7 +398,7 @@ static errno_t Tokenizer_CountStringLength(Tokenizer *tokenizer, const wchar_t s
 
     Tokenizer_SetPosition(tokenizer, start_position);
 
-    if (tokenizer->current_char == L'\0' && !escaped_symbol) {
+    if (tokenizer->current_char == '\0' && !escaped_symbol) {
         return ENOENT;
     }
 
@@ -407,7 +410,7 @@ static errno_t Tokenizer_ParseString(Tokenizer *tokenizer, VToken *token) {
     DEBUG_ASSERT(tokenizer != NULL);
     DEBUG_ASSERT(token != NULL);
 
-    const wchar_t string_symbol = tokenizer->current_char;
+    const char string_symbol = tokenizer->current_char;
     const size_t start_position = tokenizer->current_position;
 
     Tokenizer_Advance(tokenizer); // Пропускаем открывающую кавычку
@@ -421,12 +424,7 @@ static errno_t Tokenizer_ParseString(Tokenizer *tokenizer, VToken *token) {
         return count_result;
     }
 
-    // Выделяем память для строки
-    wchar_t *string = Arena_Array(tokenizer->arena, wchar_t, string_length + 1);
-    if (string == NULL) {
-        tokenizer->current_position = start_position;
-        return ENOMEM;
-    }
+    char *string = Arena_Array(tokenizer->arena, char, string_length + 1);
 
     Tokenizer_SetPosition(tokenizer, start_position);
     Tokenizer_Advance(tokenizer);
@@ -434,15 +432,15 @@ static errno_t Tokenizer_ParseString(Tokenizer *tokenizer, VToken *token) {
     size_t index = 0;
     bool escaped_symbol = false;
 
-    while (tokenizer->current_char != L'\0') {
-        if (tokenizer->current_char == L'\\') {
+    while (tokenizer->current_char != '\0') {
+        if (tokenizer->current_char == '\\') {
             if (!escaped_symbol) {
                 escaped_symbol = true;
                 Tokenizer_Advance(tokenizer);
                 continue;
             }
             escaped_symbol = false;
-            string[index++] = L'\\';
+            string[index++] = '\\';
         } else if (tokenizer->current_char == string_symbol) {
             if (!escaped_symbol) {
                 Tokenizer_Advance(tokenizer);
@@ -453,17 +451,17 @@ static errno_t Tokenizer_ParseString(Tokenizer *tokenizer, VToken *token) {
         } else {
             if (escaped_symbol) {
                 switch (tokenizer->current_char) {
-                    case L'n': string[index++] = L'\n';
+                    case 'n': string[index++] = '\n';
                         break;
-                    case L't': string[index++] = L'\t';
+                    case 't': string[index++] = '\t';
                         break;
-                    case L'r': string[index++] = L'\r';
+                    case 'r': string[index++] = '\r';
                         break;
-                    case L'"': string[index++] = L'"';
+                    case '"': string[index++] = '"';
                         break;
-                    case L'\'': string[index++] = L'\'';
+                    case '\'': string[index++] = '\'';
                         break;
-                    case L'\\': string[index++] = L'\\';
+                    case '\\': string[index++] = '\\';
                         break;
                     default:
                         free(string);
@@ -479,7 +477,7 @@ static errno_t Tokenizer_ParseString(Tokenizer *tokenizer, VToken *token) {
         Tokenizer_Advance(tokenizer);
     }
 
-    string[index] = L'\0';
+    string[index] = '\0';
 
     if (index != string_length) {
         free(string);
@@ -487,7 +485,7 @@ static errno_t Tokenizer_ParseString(Tokenizer *tokenizer, VToken *token) {
         return EILSEQ;
     }
 
-    token->data.w_chars = string;
+    token->data.chars = string;
     token->position.length = string_length + 2;
 
     return 0;
@@ -502,43 +500,43 @@ Tokenizer_Next_start:
         Tokenizer_Advance(tokenizer);
     }
 
-    if (tokenizer->current_char == L'\0') {
+    if (tokenizer->current_char == '\0') {
         token->type = TOKEN_EOF;
         return VISMUT_ERROR_OK;
     }
 
-    const wchar_t current_char = tokenizer->current_char;
-    const wchar_t next_char = Tokenizer_NextChar(tokenizer);
+    const char current_char = tokenizer->current_char;
+    const char next_char = Tokenizer_NextChar(tokenizer);
     token->position.offset = tokenizer->current_position;
 
-    if (IsAlphaOrUnderscore(current_char)) {
+    if (IsASCIIAlphaOrUnderscore(current_char)) {
         return Tokenizer_ParseIdentifier(tokenizer, token);
     }
-    if (IsDigit(current_char) || (current_char == L'-' && IsDigit(next_char))) {
+    if (IsDigit(current_char) || (current_char == '-' && IsDigit(next_char))) {
         return Tokenizer_ParseNumber(tokenizer, token);
     }
 
-    if (current_char == L'/') {
-        if (next_char == L'/') {
+    if (current_char == '/') {
+        if (next_char == '/') {
             Tokenizer_SkipSingleComment(tokenizer);
             goto Tokenizer_Next_start;
         }
-        if (next_char == L'*') {
+        if (next_char == '*') {
             Tokenizer_SkipMultiLineComment(tokenizer);
             goto Tokenizer_Next_start;
         }
     }
 
-    if (current_char == L'\"') {
+    if (current_char == '\"') {
         return Tokenizer_ParseString(tokenizer, token);
     }
 
-#define CASE_1(wchar, type_)\
-    case wchar: type = type_;\
+#define CASE_1(char, type_)\
+    case char: type = type_;\
     break;
-#define CASE_1_2(wchar1, wchar2, type1, type2) \
-    case wchar1: {  \
-        if (next_char == wchar2) {  \
+#define CASE_1_2(char1, char2, type1, type2) \
+    case char1: {  \
+        if (next_char == char2) {  \
             is_wide_token = true;   \
             type = type2;   \
             Tokenizer_Advance(tokenizer);   \
@@ -547,15 +545,15 @@ Tokenizer_Next_start:
         type = type1;   \
         break;  \
     }
-#define CASE_1_2_2(wchar1, wchar2_1, wchar2_2, type1, type2_1, type2_2) \
-    case wchar1: {  \
-        if (next_char == wchar2_1) {  \
+#define CASE_1_2_2(char1, char2_1, char2_2, type1, type2_1, type2_2) \
+    case char1: {  \
+        if (next_char == char2_1) {  \
             is_wide_token = true;   \
             type = type2_1;   \
             Tokenizer_Advance(tokenizer);   \
             break;  \
         }   \
-        if (next_char == wchar2_2) {  \
+        if (next_char == char2_2) {  \
             is_wide_token = true;   \
             type = type2_2;   \
             Tokenizer_Advance(tokenizer);   \
@@ -569,36 +567,36 @@ Tokenizer_Next_start:
     VTokenType type;
     bool is_wide_token = false;
     switch (current_char) {
-        CASE_1(L'{', TOKEN_LBRACE)
-        CASE_1(L'}', TOKEN_RBRACE)
-        CASE_1(L'[', TOKEN_LBRACKET)
-        CASE_1(L']', TOKEN_RBRACKET)
-        CASE_1(L'(', TOKEN_LPAREN)
-        CASE_1(L')', TOKEN_RPAREN)
-        CASE_1(L'.', TOKEN_DOT)
-        CASE_1(L',', TOKEN_COMMA)
-        CASE_1(L';', TOKEN_SEMICOLON)
-        CASE_1(L'^', TOKEN_XOR)
-        CASE_1(L'~', TOKEN_TILDA)
-        CASE_1(L'?', TOKEN_QUESTION)
+        CASE_1('{', TOKEN_LBRACE)
+        CASE_1('}', TOKEN_RBRACE)
+        CASE_1('[', TOKEN_LBRACKET)
+        CASE_1(']', TOKEN_RBRACKET)
+        CASE_1('(', TOKEN_LPAREN)
+        CASE_1(')', TOKEN_RPAREN)
+        CASE_1('.', TOKEN_DOT)
+        CASE_1(',', TOKEN_COMMA)
+        CASE_1(';', TOKEN_SEMICOLON)
+        CASE_1('^', TOKEN_XOR)
+        CASE_1('~', TOKEN_TILDA)
+        CASE_1('?', TOKEN_QUESTION)
 
-        CASE_1(L'@', TOKEN_WHILE_STATEMENT)
+        CASE_1('@', TOKEN_WHILE_STATEMENT)
 
-        CASE_1_2(L'#', L'!', TOKEN_CONDITION_STATEMENT, TOKEN_CONDITION_ELSE_IF)
-        CASE_1_2(L'*', L'*', TOKEN_STAR, TOKEN_POWER)
-        CASE_1_2(L'!', L'=', TOKEN_EXCLAMATION_MARK, TOKEN_NOT_EQUALS)
-        CASE_1_2(L'>', L'=', TOKEN_GREATER_THAN, TOKEN_GREATER_THAN_OR_EQUALS)
-        CASE_1_2(L'$', L'>', TOKEN_NAME_DECLARATION, TOKEN_STRUCTURE_DECLARATION)
-        CASE_1_2(L'+', L'+', TOKEN_PLUS, TOKEN_INCREMENT)
-        CASE_1_2(L'/', L'/', TOKEN_DIVIDE, TOKEN_INT_DIVIDE)
-        CASE_1_2(L'%', L'%', TOKEN_MODULE_DIV, TOKEN_FOR_STATEMENT)
-        CASE_1_2(L'|', L'|', TOKEN_BITWISE_OR, TOKEN_LOGICAL_OR)
-        CASE_1_2(L'&', L'&', TOKEN_BITWISE_AND, TOKEN_LOGICAL_OR)
+        CASE_1_2('#', '!', TOKEN_CONDITION_STATEMENT, TOKEN_CONDITION_ELSE_IF)
+        CASE_1_2('*', '*', TOKEN_STAR, TOKEN_POWER)
+        CASE_1_2('!', '=', TOKEN_EXCLAMATION_MARK, TOKEN_NOT_EQUALS)
+        CASE_1_2('>', '=', TOKEN_GREATER_THAN, TOKEN_GREATER_THAN_OR_EQUALS)
+        CASE_1_2('$', '>', TOKEN_NAME_DECLARATION, TOKEN_STRUCTURE_DECLARATION)
+        CASE_1_2('+', '+', TOKEN_PLUS, TOKEN_INCREMENT)
+        CASE_1_2('/', '/', TOKEN_DIVIDE, TOKEN_INT_DIVIDE)
+        CASE_1_2('%', '%', TOKEN_MODULE_DIV, TOKEN_FOR_STATEMENT)
+        CASE_1_2('|', '|', TOKEN_BITWISE_OR, TOKEN_LOGICAL_OR)
+        CASE_1_2('&', '&', TOKEN_BITWISE_AND, TOKEN_LOGICAL_OR)
 
-        CASE_1_2_2(L':', L':', L'>', TOKEN_COLON, TOKEN_PRINT_STATEMENT, TOKEN_INPUT_STATEMENT);
-        CASE_1_2_2(L'<', L'=', L'>', TOKEN_LESS_THAN, TOKEN_LESS_THAN_OR_EQUALS, TOKEN_NAMESPACE_DECLARATION)
-        CASE_1_2_2(L'=', L'=', L'>', TOKEN_ASSIGN, TOKEN_EQUALS, TOKEN_THEN)
-        CASE_1_2_2(L'-', L'>', L'-', TOKEN_MINUS, TOKEN_ARROW, TOKEN_DECREMENT)
+        CASE_1_2_2(':', ':', '>', TOKEN_COLON, TOKEN_PRINT_STATEMENT, TOKEN_INPUT_STATEMENT);
+        CASE_1_2_2('<', '=', '>', TOKEN_LESS_THAN, TOKEN_LESS_THAN_OR_EQUALS, TOKEN_NAMESPACE_DECLARATION)
+        CASE_1_2_2('=', '=', '>', TOKEN_ASSIGN, TOKEN_EQUALS, TOKEN_THEN)
+        CASE_1_2_2('-', '>', '-', TOKEN_MINUS, TOKEN_ARROW, TOKEN_DECREMENT)
 
         default:
             return VISMUT_ERROR_UNKNOWN_CHAR;

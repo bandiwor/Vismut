@@ -23,55 +23,55 @@ void ansi_enable_color(const int enable) {
     color_enabled = enable;
 }
 
-void ansi_set_color(const wchar_t *color) {
+void ansi_set_color(const char *color) {
     if (ansi_supports_color()) {
-        fwprintf(stdout, L"%ls", color);
+        fprintf(stdout, "%s", color);
     }
 }
 
-void ansi_set_bg_color(const wchar_t *color) {
+void ansi_set_bg_color(const char *color) {
     if (ansi_supports_color()) {
-        fwprintf(stdout, L"%ls", color);
+        fprintf(stdout, "%s", color);
     }
 }
 
-void ansi_set_style(const wchar_t *style) {
+void ansi_set_style(const char *style) {
     if (ansi_supports_color()) {
-        fwprintf(stdout, L"%ls", style);
+        fprintf(stdout, "%s", style);
     }
 }
 
 void ansi_reset(void) {
     if (ansi_supports_color()) {
-        fwprintf(stdout, ANSI_COLOR_RESET);
+        fprintf(stdout, ANSI_COLOR_RESET);
     }
 }
 
-void ansi_print_color(const wchar_t *color, const wchar_t *text) {
+void ansi_print_color(const char *color, const char *text) {
     if (ansi_supports_color()) {
-        fwprintf(stdout, L"%ls%ls" ANSI_COLOR_RESET, color, text);
+        fprintf(stdout, "%s%s" ANSI_COLOR_RESET, color, text);
     } else {
-        fwprintf(stdout, L"%ls", text);
+        fprintf(stdout, "%s", text);
     }
 }
 
-void ansi_print_bg(const wchar_t *bg_color, const wchar_t *text) {
+void ansi_print_bg(const char *bg_color, const char *text) {
     if (ansi_supports_color()) {
-        fwprintf(stdout, L"%ls%ls" ANSI_COLOR_RESET, bg_color, text);
+        fprintf(stdout, "%s%s" ANSI_COLOR_RESET, bg_color, text);
     } else {
-        fwprintf(stdout, L"%ls", text);
+        fprintf(stdout, "%s", text);
     }
 }
 
-void ansi_print_styled(const wchar_t *color, const wchar_t *bg_color,
-                       const wchar_t *style, const wchar_t *text) {
+void ansi_print_styled(const char *color, const char *bg_color,
+                       const char *style, const char *text) {
     if (ansi_supports_color()) {
-        if (style) fwprintf(stdout, L"%ls", style);
-        if (bg_color) fwprintf(stdout, L"%ls", bg_color);
-        if (color) fwprintf(stdout, L"%ls", color);
-        fwprintf(stdout, L"%ls" ANSI_COLOR_RESET, text);
+        if (style) fprintf(stdout, "%s", style);
+        if (bg_color) fprintf(stdout, "%s", bg_color);
+        if (color) fprintf(stdout, "%s", color);
+        fprintf(stdout, "%s" ANSI_COLOR_RESET, text);
     } else {
-        fwprintf(stdout, L"%ls", text);
+        fprintf(stdout, "%s", text);
     }
 }
 

@@ -68,9 +68,9 @@ static errno_t ASTTypeAnalyzeNode(ASTTypeAnalyzerContext *context, ASTNode *node
 
             const VValueType common_type = FindCommonType(left, right);
             if (unlikely(common_type == VALUE_UNKNOWN)) {
-                wprintf(L"Error in node:\n");
+                wprintf("Error in node:\n");
                 ASTNode_Print(node);
-                wprintf(L"Operation: '<%ls> %ls <%ls>' is unsupported\n", VValueType_String(left),
+                wprintf("Operation: '<%s> %s <%s>' is unsupported\n", VValueType_String(left),
                         ASTBinaryType_String(node->binary_op.op), VValueType_String(right));
                 return VISMUT_ERROR_UNSUPPORTED_OPERATION;
             }
@@ -90,9 +90,9 @@ static errno_t ASTTypeAnalyzeNode(ASTTypeAnalyzerContext *context, ASTNode *node
             }
             const VValueType result_with_casting = GetBinaryOpResultType(node->binary_op.op, common_type, common_type);
             if (unlikely(result_with_casting == VALUE_UNKNOWN)) {
-                wprintf(L"Error in node:\n");
+                wprintf("Error in node:\n");
                 ASTNode_Print(node);
-                wprintf(L"Operation: '<%ls> %ls <%ls>' is unsupported\n", VValueType_String(common_type),
+                wprintf("Operation: '<%s> %s <%s>' is unsupported\n", VValueType_String(common_type),
                         ASTBinaryType_String(node->binary_op.op), VValueType_String(common_type));
                 return VISMUT_ERROR_UNSUPPORTED_OPERATION;
             }
@@ -109,9 +109,9 @@ static errno_t ASTTypeAnalyzeNode(ASTTypeAnalyzerContext *context, ASTNode *node
 
             const VValueType result = GetUnaryOpResultType(node->unary_op.op, operand);
             if (result == VALUE_UNKNOWN) {
-                wprintf(L"Error in node:\n");
+                wprintf("Error in node:\n");
                 ASTNode_Print(node);
-                wprintf(L"'<%ls>' for '<%ls>' is unsupported\n", ASTUnaryType_String(node->unary_op.op),
+                wprintf("'<%s>' for '<%s>' is unsupported\n", ASTUnaryType_String(node->unary_op.op),
                         VValueType_String(operand));
                 return VISMUT_ERROR_UNSUPPORTED_OPERATION;
             }
@@ -186,9 +186,9 @@ static errno_t ASTTypeAnalyzeNode(ASTTypeAnalyzerContext *context, ASTNode *node
             if (node->var_decl.var_type == VALUE_AUTO) {
                 node->var_decl.var_type = init_value;
             } else if (node->var_decl.var_type != init_value) {
-                wprintf(L"Error in node:");
+                wprintf("Error in node:");
                 ASTNode_Print(node);
-                wprintf(L"Type %ls != %ls\n", VValueType_String(node->var_decl.var_type),
+                wprintf("Type %s != %s\n", VValueType_String(node->var_decl.var_type),
                         VValueType_String(init_value));
                 return VISMUT_ERROR_TYPE_IS_INCOMPATIBLE;
             }

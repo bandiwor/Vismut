@@ -1,5 +1,9 @@
 #include "scope.h"
 
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "../errors/errors.h"
 #include "../hash/murmur3.h"
 
@@ -19,6 +23,11 @@ static bool symbol_has_flag(const Symbol *sym, const uint32_t flag) {
     DEBUG_ASSERT(sym != NULL);
     return sym->flags & flag;
 }
+
+// static Scope *Scope_GetParent(const Scope *scope) { return scope->parent; }
+// static bool Scope_IsGlobal(const Scope *scope) { return scope->parent == NULL; }
+// static size_t Scope_Size(const Scope *scope) { return scope->size; }
+
 
 Scope *Scope_Allocate(Arena *allocator, Scope *parent) {
     Scope *scope = Arena_Type(allocator, Scope);
@@ -71,7 +80,7 @@ static void rehash(Scope *scope, const size_t new_capacity) {
 
 static Symbol *create_symbol(
     Arena *allocator,
-    const wchar_t *name,
+    const char *name,
     const VValueType type,
     const uint32_t flags,
     const uint32_t hash
@@ -90,16 +99,16 @@ static Symbol *create_symbol(
 }
 
 
-errno_t Scope_Declare(Scope *scope, const wchar_t *name,
+errno_t Scope_Declare(Scope *scope, const char *name,
                       const VValueType type, const uint32_t flags) {
     DEBUG_ASSERT(scope);
     DEBUG_ASSERT(name);
 
-    const uint32_t hash = murmurhash3_wstring(name, MURMURHASH3_DEFAULT_STR_SEED);
+    const uint32_t hash = murmurhash3_string(name, MURMURHASH3_DEFAULT_STR_SEED);
     size_t index = slot_index(scope, hash);
 
     for (const Symbol *sym = scope->slots[index].head; sym; sym = sym->next) {
-        if (sym->hash == hash && wcscmp(sym->name, name) == 0) {
+        if (sym->hash == hash && strcmp(sym->name, name) == 0) {
             return VISMUT_ERROR_SYMBOL_ALREADY_DEFINED;
         }
     }
@@ -142,17 +151,17 @@ errno_t Scope_RemoveUnused(Scope *scope) {
 }
 
 
-Symbol *Scope_Resolve(const Scope *scope, const wchar_t *name) {
+Symbol *Scope_Resolve(const Scope *scope, const char *name) {
     DEBUG_ASSERT(scope);
     DEBUG_ASSERT(name);
 
-    const uint32_t hash = murmurhash3_wstring(name, MURMURHASH3_DEFAULT_STR_SEED);
+    const uint32_t hash = murmurhash3_string(name, MURMURHASH3_DEFAULT_STR_SEED);
 
     for (const Scope *cur = scope; cur; cur = cur->parent) {
         const size_t index = slot_index(cur, hash);
 
         for (Symbol *sym = cur->slots[index].head; sym; sym = sym->next) {
-            if (sym->hash == hash && wcscmp(sym->name, name) == 0) {
+            if (sym->hash == hash && strcmp(sym->name, name) == 0) {
                 return sym;
             }
         }
@@ -162,7 +171,7 @@ Symbol *Scope_Resolve(const Scope *scope, const wchar_t *name) {
 }
 
 
-errno_t Scope_AssignConstantEvaluated(const Scope *scope, const wchar_t *name, const VValue value) {
+errno_t Scope_AssignConstantEvaluated(const Scope *scope, const char *name, const VValue value) {
     DEBUG_ASSERT(scope != NULL);
     DEBUG_ASSERT(name != NULL);
 
@@ -181,7 +190,7 @@ errno_t Scope_AssignConstantEvaluated(const Scope *scope, const wchar_t *name, c
     return true;
 }
 
-void Scope_MarkInitialized(const Scope *scope, const wchar_t *name) {
+void Scope_MarkInitialized(const Scope *scope, const char *name) {
     DEBUG_ASSERT(scope != NULL);
     DEBUG_ASSERT(name != NULL);
 
@@ -191,7 +200,7 @@ void Scope_MarkInitialized(const Scope *scope, const wchar_t *name) {
     }
 }
 
-void Scope_MarkUsed(const Scope *scope, const wchar_t *name) {
+void Scope_MarkUsed(const Scope *scope, const char *name) {
     DEBUG_ASSERT(scope != NULL);
     DEBUG_ASSERT(name != NULL);
 

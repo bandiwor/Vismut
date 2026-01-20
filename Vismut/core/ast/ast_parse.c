@@ -161,7 +161,7 @@ static errno_t ASTParser_ParseType(const VTokenType token, VValueType *out_value
             value = VALUE_F64;
             break;
         case TOKEN_STRING_TYPE:
-            value = VALUE_WSTR;
+            value = VALUE_STR;
             break;
         default:
             return VISMUT_ERROR_UNKNOWN_TYPE;
@@ -184,8 +184,8 @@ static VValue GetVValueFromLiteralToken(const VToken token) {
             };
         case TOKEN_CHARS_LITERAL:
             return (VValue){
-                .type = VALUE_WSTR,
-                .wstr = token.data.w_chars
+                .type = VALUE_STR,
+                .str = token.data.chars
             };
         default:
             return (VValue){
@@ -218,7 +218,7 @@ static errno_t ASTParser_ParseVarRef(ASTParser *ast_parser, ASTNode **node) {
     errno_t err;
 
     *node = CreateVarRefNode(
-        ast_parser->arena, ast_parser->current_token.position, ast_parser->current_token.data.w_chars
+        ast_parser->arena, ast_parser->current_token.position, ast_parser->current_token.data.chars
     );
 
     NEXT_TOKEN_SAFE(ast_parser, err);
@@ -404,7 +404,7 @@ static errno_t ASTParser_ParseNameDeclaration(ASTParser *ast_parser, ASTNode **n
 
     // Parse: var name
     NEXT_TOKEN_EXCEPT(ast_parser, err, TOKEN_IDENTIFIER);
-    const wchar_t *var_name = ast_parser->current_token.data.w_chars;
+    const char *var_name = ast_parser->current_token.data.chars;
 
     // Get next token TOKEN_ASSIGN or TOKEN_COLON
     NEXT_TOKEN_SAFE(ast_parser, err);
@@ -508,7 +508,7 @@ static errno_t ASTParser_ParseBlock(ASTParser *ast_parser, ASTNode **node) {
         ASTNode *statement = NULL;
         RISKY_EXPRESSION_SAFE(ASTParser_ParseStatement(ast_parser, &statement), err);
         if (statement == NULL) {
-            wprintf(L"Statement is NULL. %hs %d\n", __FILE__, __LINE__);
+            printf("Statement is NULL. %s %d\n", __FILE__, __LINE__);
             exit(1);
         }
 
