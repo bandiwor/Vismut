@@ -2,17 +2,36 @@
 #include "../errors/errors.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "../types.h"
 
 #define ALIGN_FORWARD(ptr, align) (((ptr) + ((align) - 1)) & ~((align) - 1))
+
+#ifndef ARENA_BLOCK_SIZE
+#define ARENA_BLOCK_SIZE (64 * 1024)
+#endif
+
+#ifndef ARENA_ALIGNMENT
+#define ARENA_ALIGNMENT 32
+#endif
+
+#ifdef _WIN32
+#include <malloc.h>
+#define ALIGNED_ALLOC(alignment, size) _aligned_malloc(size, alignment)
+#define ALIGNED_FREE(ptr) _aligned_free(ptr)
+#else
+#include <malloc.h>
+#define ALIGNED_ALLOC(alignment, size) aligned_alloc(alignment, size)
+#define ALIGNED_FREE(ptr) free(ptr)
+#endif
 
 ArenaBlock *ArenaBlock_Create(const size_t size) {
     ArenaBlock *arena_block = calloc(1, sizeof(ArenaBlock));
     if (arena_block == NULL) {
         exit(VISMUT_ERROR_ALLOC);
     }
-    void *memory_block = malloc(size);
+    void *memory_block = ALIGNED_ALLOC(ARENA_ALIGNMENT, size);
     if (memory_block == NULL) {
         free(arena_block);
         exit(VISMUT_ERROR_ALLOC);
@@ -28,7 +47,7 @@ void ArenaBlock_Destroy(ArenaBlock *block) {
     DEBUG_ASSERT(block != NULL);
 
     if (block->memory != NULL) {
-        free(block->memory);
+        ALIGNED_FREE(block->memory);
     }
 
     free(block);

@@ -1,12 +1,18 @@
 #include "ast_parse.h"
 
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "../errors/errors.h"
 #include "../errors/callstack.h"
+#include "../../utils/find_position.h"
+#include "../../utils/module_name.h"
+#include "../hash/murmur3.h"
 
-#define CURRENT_TOKEN_TYPE(ast_parser_ptr) ((ast_parser_ptr)->current_token.type)
-#define CURRENT_TOKEN_POS(ast_parser_ptr) ((ast_parser_ptr)->current_token.position)
+#define CURRENT_TOKEN(ast_parser_ptr) ((ast_parser_ptr)->current_token)
+#define CURRENT_TOKEN_TYPE(ast_parser_ptr) (CURRENT_TOKEN(ast_parser_ptr).type)
+#define CURRENT_TOKEN_POS(ast_parser_ptr) (CURRENT_TOKEN(ast_parser_ptr).position)
 
 #define CURRENT_TOKEN_TYPE_ASSERT(ast_parser_ptr, token_type)    \
     START_BLOCK_WRAPPER \
@@ -55,6 +61,8 @@ static errno_t ASTParser_ParseExpressionWithPrecedence(ASTParser *, ASTNode **, 
 static errno_t ASTParser_ParseStatement(ASTParser *ast_parser, ASTNode **node);
 
 static errno_t ASTParser_ParseExpressionOrBlock(ASTParser *ast_parser, ASTNode **node);
+
+static errno_t ASTParser_ParseBlock(ASTParser *ast_parser, ASTNode **node);
 
 static OperatorPrecedence GetPrecedence(const VTokenType token) {
     CALLSTACK_TRACE();
@@ -149,11 +157,27 @@ static int IsRightAssocOperator(const ASTBinaryType token) {
     return token == AST_BINARY_POW || token == AST_BINARY_ASSIGN;
 }
 
-static errno_t ASTParser_ParseType(const VTokenType token, VValueType *out_value) {
+static void ASTParser_SetError(const ASTParser *ast_parser, const VismutError err_code, const Position position,
+                               const VismutErrorDetails details) {
+    if (ast_parser->error_info == NULL) return;
+    const TextPosition error_position = FindPosition(ast_parser->source, ast_parser->source + ast_parser->source_length,
+                                                     ast_parser->source + position.offset);
+    ast_parser->error_info->error = err_code;
+    ast_parser->error_info->source = ast_parser->source;
+    ast_parser->error_info->source_length = ast_parser->source_length;
+    ast_parser->error_info->module = ast_parser->module_node->module.module_name;
+    ast_parser->error_info->column = (int) error_position.column;
+    ast_parser->error_info->line = (int) error_position.line;
+    ast_parser->error_info->location = ast_parser->source + position.offset;
+    ast_parser->error_info->length = (int) position.length;
+    ast_parser->error_info->details = details;
+}
+
+static errno_t ASTParser_ParseType(const ASTParser *ast_parser, const VToken token, VValueType *out_value) {
     CALLSTACK_TRACE();
 
     VValueType value;
-    switch (token) {
+    switch (token.type) {
         case TOKEN_I64_TYPE:
             value = VALUE_I64;
             break;
@@ -164,6 +188,7 @@ static errno_t ASTParser_ParseType(const VTokenType token, VValueType *out_value
             value = VALUE_STR;
             break;
         default:
+            ASTParser_SetError(ast_parser, VISMUT_ERROR_UNKNOWN_TYPE, token.position, (VismutErrorDetails){0});
             return VISMUT_ERROR_UNKNOWN_TYPE;
     }
     *out_value = value;
@@ -203,6 +228,8 @@ static errno_t ASTParser_ParseLiteral(ASTParser *ast_parser, ASTNode **node) {
 
     const VValue value = GetVValueFromLiteralToken(ast_parser->current_token);
     if (value.type == VALUE_UNKNOWN) {
+        ASTParser_SetError(ast_parser, VISMUT_ERROR_UNEXPECTED_TOKEN, ast_parser->current_token.position,
+                           (VismutErrorDetails){0});
         return VISMUT_ERROR_UNEXPECTED_TOKEN;
     }
 
@@ -274,7 +301,7 @@ static errno_t ASTParser_ParseTypeCast(ASTParser *ast_parser, ASTNode **node) {
     const Position pos = ast_parser->current_token.position;
 
     VValueType target_type;
-    RISKY_EXPRESSION_SAFE(ASTParser_ParseType(ast_parser->current_token.type, &target_type), err);
+    RISKY_EXPRESSION_SAFE(ASTParser_ParseType(ast_parser, ast_parser->current_token, &target_type), err);
 
     NEXT_TOKEN_EXCEPT(ast_parser, err, TOKEN_LPAREN);
     NEXT_TOKEN_SAFE(ast_parser, err);
@@ -292,6 +319,75 @@ static errno_t ASTParser_ParseTypeCast(ASTParser *ast_parser, ASTNode **node) {
     return VISMUT_ERROR_OK;
 }
 
+static errno_t
+ASTParser_ParseFunctionCallArguments(ASTParser *ast_parser, ASTNode **arguments, size_t *arguments_count) {
+    CALLSTACK_TRACE();
+    DEBUG_ASSERT(CURRENT_TOKEN_TYPE(ast_parser) == TOKEN_LPAREN);
+    errno_t err;
+
+    // Skip TOKEN_LPAREN
+    NEXT_TOKEN_SAFE(ast_parser, err);
+
+    ASTNode *first_argument = NULL;
+    ASTNode *last_argument = NULL;
+    size_t count = 0;
+
+    while (true) {
+        if (CURRENT_TOKEN_TYPE(ast_parser) == TOKEN_RPAREN) {
+            NEXT_TOKEN_SAFE(ast_parser, err);
+            break;
+        }
+        ASTNode *argument;
+        PARSE_EXPRESSION_SAFE(ast_parser, err, &argument);
+
+        if (first_argument == NULL) {
+            first_argument = argument;
+            last_argument = argument;
+        } else {
+            DEBUG_ASSERT(last_argument != NULL);
+            last_argument->next_node = (struct ASTNode *) argument;
+            last_argument = argument;
+        }
+        ++count;
+
+        if (CURRENT_TOKEN_TYPE(ast_parser) == TOKEN_COMMA) {
+            NEXT_TOKEN_SAFE(ast_parser, err);
+            continue;
+        }
+
+        CURRENT_TOKEN_TYPE_ASSERT(ast_parser, TOKEN_RPAREN);
+        NEXT_TOKEN_SAFE(ast_parser, err);
+        break;
+    }
+
+    *arguments = first_argument;
+    *arguments_count = count;
+    return VISMUT_ERROR_OK;
+}
+
+static errno_t ASTParser_ParseFunctionCall(ASTParser *ast_parser, ASTNode *var_ref_node) {
+    CALLSTACK_TRACE();
+    DEBUG_ASSERT(var_ref_node->type == AST_VAR_REF);
+    errno_t err;
+
+    FunctionSignature *signature = FindFunctionSignature(ast_parser->module_node, var_ref_node->var_ref.var_name);
+    if (signature == NULL) {
+        ASTParser_SetError(ast_parser, VISMUT_ERROR_FUNCTION_NOT_DEFINED, var_ref_node->pos, (VismutErrorDetails){0});
+        return VISMUT_ERROR_FUNCTION_NOT_DEFINED;
+    }
+
+    var_ref_node->type = AST_FUNCTION_CALL;
+    var_ref_node->function_call.signature = signature;
+
+    RISKY_EXPRESSION_SAFE(
+        ASTParser_ParseFunctionCallArguments(ast_parser,
+            (ASTNode**)&var_ref_node->function_call.arguments,
+            &var_ref_node->function_call.arguments_count),
+        err);
+
+    return VISMUT_ERROR_OK;
+}
+
 static errno_t ASTParser_ParsePrimaryExpression(
     ASTParser *ast_parser, ASTNode **node) {
     CALLSTACK_TRACE();
@@ -304,12 +400,22 @@ static errno_t ASTParser_ParsePrimaryExpression(
         case TOKEN_FLOAT_LITERAL:
         case TOKEN_CHARS_LITERAL:
             return ASTParser_ParseLiteral(ast_parser, node);
-        case TOKEN_IDENTIFIER:
-            return ASTParser_ParseVarRef(ast_parser, node);
+        case TOKEN_IDENTIFIER: {
+            errno_t err;
+            ASTNode *var_ref_node;
+            RISKY_EXPRESSION_SAFE(ASTParser_ParseVarRef(ast_parser, &var_ref_node), err);
+            if (CURRENT_TOKEN_TYPE(ast_parser) == TOKEN_LPAREN)
+                RISKY_EXPRESSION_SAFE(ASTParser_ParseFunctionCall(ast_parser, var_ref_node), err);
+
+            *node = var_ref_node;
+            return VISMUT_ERROR_OK;
+        }
         case TOKEN_LPAREN:
             return ASTParser_ParseParenthesizedExpression(
                 ast_parser, node);
         default:
+            ASTParser_SetError(ast_parser, VISMUT_ERROR_UNEXPECTED_TOKEN, CURRENT_TOKEN_POS(ast_parser),
+                               (VismutErrorDetails){0});
             return VISMUT_ERROR_UNEXPECTED_TOKEN;
     }
 }
@@ -381,8 +487,18 @@ static errno_t ASTParser_ParseExpression(
 ASTParser ASTParser_Create(Tokenizer *tokenizer) {
     Scope *module_scope = Scope_Allocate(tokenizer->arena, NULL);
     ASTNode *module = CreateModuleNode(
-        tokenizer->arena, tokenizer->source_filename, module_scope
+        tokenizer->arena,
+        CreateModuleName(tokenizer->arena, tokenizer->source_filename,
+                         (int) strlen((const char *) tokenizer->source_filename)), module_scope
     );
+    if (tokenizer->error_info != NULL) {
+        *tokenizer->error_info = (VismutErrorInfo){
+            .error = VISMUT_ERROR_OK,
+            .line = -1,
+            .column = -1,
+            .length = -1,
+        };
+    }
 
     return (ASTParser){
         .source = tokenizer->start,
@@ -392,7 +508,139 @@ ASTParser ASTParser_Create(Tokenizer *tokenizer) {
         .current_token = (VToken){0},
         .module_node = module,
         .current_scope = module_scope,
+        .error_info = tokenizer->error_info,
     };
+}
+
+static errno_t ASTParser_ParseFunctionParams(ASTParser *ast_parser, FunctionParams *params) {
+    CALLSTACK_TRACE();
+    errno_t err;
+
+    const FunctionParamNode *first_param = NULL;
+    FunctionParamNode *last_param = NULL;
+    size_t params_count = 0;
+
+    while (true) {
+        if (CURRENT_TOKEN_TYPE(ast_parser) == TOKEN_RPAREN) break;
+        CURRENT_TOKEN_TYPE_ASSERT(ast_parser, TOKEN_IDENTIFIER);
+        const uint8_t *param_name = ast_parser->current_token.data.chars;
+
+        NEXT_TOKEN_EXCEPT(ast_parser, err, TOKEN_COLON);
+        NEXT_TOKEN_SAFE(ast_parser, err);
+
+        VValueType param_type;
+        RISKY_EXPRESSION_SAFE(ASTParser_ParseType(ast_parser, ast_parser->current_token, &param_type), err);
+        NEXT_TOKEN_SAFE(ast_parser, err);
+
+        FunctionParamNode *param_node = Arena_Type(ast_parser->arena, FunctionParamNode);
+        *param_node = (FunctionParamNode){
+            .next = NULL,
+            .name = param_name,
+            .type = param_type,
+        };
+
+        if (first_param == NULL) {
+            first_param = param_node;
+            last_param = param_node;
+        } else {
+            DEBUG_ASSERT(last_param != NULL);
+            last_param->next = param_node;
+            last_param = param_node;
+        }
+        ++params_count;
+
+        if (CURRENT_TOKEN_TYPE(ast_parser) == TOKEN_COMMA) {
+            NEXT_TOKEN_SAFE(ast_parser, err);
+            continue;
+        }
+
+        break;
+    }
+
+    *params = (FunctionParams){
+        .param_names = NULL,
+        .param_types = NULL,
+        .params_count = params_count,
+    };
+
+    if (params_count == 0) return VISMUT_ERROR_OK;
+
+    params->param_names = Arena_Array(ast_parser->arena, *params->param_names, params_count);
+    params->param_types = Arena_Array(ast_parser->arena, *params->param_types, params_count);
+
+    int i = 0;
+    for (const FunctionParamNode *current = first_param; current != NULL; current = current->next, ++i) {
+        params->param_names[i] = current->name;
+        params->param_types[i] = current->type;
+    }
+
+    return VISMUT_ERROR_OK;
+}
+
+static errno_t ASTParser_ParseFunctionDeclaration(ASTParser *ast_parser, ASTNode **node, const uint8_t *function_name,
+                                                  const Position pos) {
+    CALLSTACK_TRACE();
+    DEBUG_ASSERT(CURRENT_TOKEN_TYPE(ast_parser) == TOKEN_LPAREN);
+    errno_t err;
+
+    // skip LPAREN
+    NEXT_TOKEN_SAFE(ast_parser, err);
+
+    if (FindFunctionSignature(ast_parser->module_node, function_name) != NULL) {
+        ASTParser_SetError(ast_parser, VISMUT_ERROR_FUNCTION_ALREADY_DEFINED, pos, (VismutErrorDetails){0});
+        return VISMUT_ERROR_FUNCTION_ALREADY_DEFINED;
+    }
+
+    FunctionSignature *signature = Arena_Type(ast_parser->arena, *signature);
+    *signature = (FunctionSignature){
+        .params = {0},
+        .function_name = function_name,
+        .function_name_hash = murmurhash3_string(function_name, MURMURHASH3_DEFAULT_STR_SEED),
+        .return_type = VALUE_UNKNOWN,
+        .flags = 0,
+    };
+    RISKY_EXPRESSION_SAFE(ASTParser_ParseFunctionParams(ast_parser, &signature->params), err);
+
+    // skip RPAREN
+    NEXT_TOKEN_SAFE(ast_parser, err);
+
+    VValueType return_type = VALUE_VOID;
+    if (CURRENT_TOKEN_TYPE(ast_parser) == TOKEN_COLON) {
+        NEXT_TOKEN_SAFE(ast_parser, err);
+        RISKY_EXPRESSION_SAFE(ASTParser_ParseType(ast_parser, CURRENT_TOKEN(ast_parser), &return_type), err);
+        NEXT_TOKEN_SAFE(ast_parser, err);
+    }
+
+    Scope *function_scope = Scope_Allocate(ast_parser->arena, ast_parser->current_scope);
+
+    switch (CURRENT_TOKEN_TYPE(ast_parser)) {
+        case TOKEN_ASSIGN: {
+            return_type = return_type == VALUE_VOID ? VALUE_AUTO : return_type;
+            signature->return_type = return_type;
+            NEXT_TOKEN_SAFE(ast_parser, err);
+            ASTNode *function_body;
+            PARSE_EXPRESSION_SAFE(ast_parser, err, &function_body);
+            *node = CreateFunctionDeclarationNode(
+                ast_parser->arena, pos, signature, function_body, function_scope
+            );
+            return VISMUT_ERROR_OK;
+        }
+        case TOKEN_LBRACE: {
+            signature->return_type = return_type;
+            ast_parser->current_scope = function_scope;
+            ASTNode *function_body;
+            RISKY_EXPRESSION_SAFE(ASTParser_ParseBlock(ast_parser, &function_body), err);
+            ast_parser->current_scope = ast_parser->current_scope->parent;
+            *node = CreateFunctionDeclarationNode(
+                ast_parser->arena, pos, signature, function_body, function_scope
+            );
+            return VISMUT_ERROR_OK;
+        }
+        default:
+            ASTParser_SetError(ast_parser, VISMUT_ERROR_UNEXPECTED_TOKEN, CURRENT_TOKEN_POS(ast_parser),
+                               (VismutErrorDetails){.unexpected_token.caught = CURRENT_TOKEN(ast_parser)});
+            return VISMUT_ERROR_UNEXPECTED_TOKEN;
+    }
 }
 
 static errno_t ASTParser_ParseNameDeclaration(ASTParser *ast_parser, ASTNode **node) {
@@ -405,10 +653,12 @@ static errno_t ASTParser_ParseNameDeclaration(ASTParser *ast_parser, ASTNode **n
     // Parse: var name
     NEXT_TOKEN_EXCEPT(ast_parser, err, TOKEN_IDENTIFIER);
     const uint8_t *var_name = ast_parser->current_token.data.chars;
-
-    // Get next token TOKEN_ASSIGN or TOKEN_COLON
     NEXT_TOKEN_SAFE(ast_parser, err);
+
     switch (ast_parser->current_token.type) {
+        case TOKEN_LPAREN: {
+            return ASTParser_ParseFunctionDeclaration(ast_parser, node, var_name, pos);
+        }
         case TOKEN_ASSIGN: {
             // Skip TOKEN_ASSIGN and set type to auto
             NEXT_TOKEN_SAFE(ast_parser, err);
@@ -426,7 +676,7 @@ static errno_t ASTParser_ParseNameDeclaration(ASTParser *ast_parser, ASTNode **n
         case TOKEN_COLON: {
             NEXT_TOKEN_SAFE(ast_parser, err);
             VValueType variable_type;
-            RISKY_EXPRESSION_SAFE(ASTParser_ParseType(ast_parser->current_token.type, &variable_type), err);
+            RISKY_EXPRESSION_SAFE(ASTParser_ParseType(ast_parser, ast_parser->current_token, &variable_type), err);
             NEXT_TOKEN_SAFE(ast_parser, err);
             if (ast_parser->current_token.type != TOKEN_ASSIGN) {
                 *node = CreateVarDeclarationNode(
@@ -451,6 +701,8 @@ static errno_t ASTParser_ParseNameDeclaration(ASTParser *ast_parser, ASTNode **n
             return VISMUT_ERROR_OK;
         }
         default:
+            ASTParser_SetError(ast_parser, VISMUT_ERROR_UNEXPECTED_TOKEN, CURRENT_TOKEN_POS(ast_parser),
+                               (VismutErrorDetails){0});
             return VISMUT_ERROR_UNEXPECTED_TOKEN;
     }
 }
@@ -577,6 +829,25 @@ static errno_t ASTParser_ParsePrintStatement(ASTParser *ast_parser, ASTNode **no
     return VISMUT_ERROR_OK;
 }
 
+static errno_t ASTParser_ParseWhileStatement(ASTParser *ast_parser, ASTNode **node) {
+    CALLSTACK_TRACE();
+    DEBUG_ASSERT(CURRENT_TOKEN_TYPE(ast_parser) == TOKEN_WHILE_STATEMENT);
+    errno_t err;
+
+    const Position pos = CURRENT_TOKEN_POS(ast_parser);
+    NEXT_TOKEN_SAFE(ast_parser, err);
+
+    ASTNode *condition;
+    PARSE_EXPRESSION_SAFE(ast_parser, err, &condition);
+
+    ASTNode *body;
+    PARSE_EXPRESSION_OR_BLOCK_SAFE(ast_parser, err, &body);
+
+    *node = CreateWhileStatementNode(ast_parser->arena, pos, condition, body);
+
+    return VISMUT_ERROR_OK;
+}
+
 static errno_t ASTParser_ParseStatement(ASTParser *ast_parser, ASTNode **node) {
     CALLSTACK_TRACE();
     errno_t err;
@@ -588,6 +859,9 @@ start_label:
             goto clear_semicolon;
         case TOKEN_CONDITION_STATEMENT:
             RISKY_EXPRESSION_SAFE(ASTParser_ParseIfStatement(ast_parser, node), err);
+            goto clear_semicolon;
+        case TOKEN_WHILE_STATEMENT:
+            RISKY_EXPRESSION_SAFE(ASTParser_ParseWhileStatement(ast_parser, node), err);
             goto clear_semicolon;
         case TOKEN_PRINT_STATEMENT:
             RISKY_EXPRESSION_SAFE(ASTParser_ParsePrintStatement(ast_parser, node), err);
@@ -606,8 +880,7 @@ clear_semicolon:
     return err;
 }
 
-errno_t ASTParser_Parse(ASTParser *ast_parser) {
-    DEBUG_ASSERT(ast_parser != NULL);
+static errno_t ASTParser_ParseModule(ASTParser *ast_parser) {
     CALLSTACK_TRACE();
     errno_t err;
 
@@ -625,16 +898,19 @@ errno_t ASTParser_Parse(ASTParser *ast_parser) {
             if (first_function == NULL) {
                 first_function = statement;
                 last_function = statement;
+                ast_parser->module_node->module.functions = (struct ASTNode *) first_function;
             } else {
                 DEBUG_ASSERT(last_function != NULL);
                 last_function->next_node = (struct ASTNode *) statement;
                 last_function = statement;
             }
+            continue;
         }
 
         if (first_statement == NULL) {
             first_statement = statement;
             last_statement = statement;
+            ast_parser->module_node->module.statements = (struct ASTNode *) first_statement;
         } else {
             DEBUG_ASSERT(last_statement != NULL);
             last_statement->next_node = (struct ASTNode *) statement;
@@ -642,8 +918,10 @@ errno_t ASTParser_Parse(ASTParser *ast_parser) {
         }
     }
 
-    ast_parser->module_node->module.statements = (struct ASTNode *) first_statement;
-    ast_parser->module_node->module.functions = (struct ASTNode *) first_function;
-
     return VISMUT_ERROR_OK;
+}
+
+errno_t ASTParser_Parse(ASTParser *ast_parser) {
+    DEBUG_ASSERT(ast_parser != NULL);
+    return ASTParser_ParseModule(ast_parser);
 }

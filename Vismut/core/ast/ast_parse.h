@@ -16,6 +16,7 @@ typedef struct {
     VToken current_token;
     ASTNode *module_node;
     Scope *current_scope;
+    VismutErrorInfo *error_info;
 } ASTParser;
 
 ASTParser ASTParser_Create(Tokenizer *tokenizer);

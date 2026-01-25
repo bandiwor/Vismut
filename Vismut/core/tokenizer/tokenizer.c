@@ -5,10 +5,10 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
-#include <windows.h>
 
 #include "../convert.h"
 #include "../errors/errors.h"
+#include "../../utils/find_position.h"
 
 typedef enum {
     CT_UNKNOWN = 0, // Unknown / Control
@@ -45,7 +45,15 @@ static const uint8_t CharMap[256] = {
 
 attribute_cold
 Tokenizer Tokenizer_Create(const uint8_t *source, const size_t source_length, const uint8_t *source_filename,
-                           Arena *arena) {
+                           Arena *arena, VismutErrorInfo *error_info) {
+    if (error_info != NULL) {
+        *error_info = (VismutErrorInfo){
+            .error = VISMUT_ERROR_OK,
+            .line = -1,
+            .column = -1,
+            .length = -1,
+        };
+    }
     return (Tokenizer){
         .source_filename = source_filename,
         .start = source,
@@ -53,7 +61,22 @@ Tokenizer Tokenizer_Create(const uint8_t *source, const size_t source_length, co
         .limit = source + source_length,
         .token_start = source,
         .arena = arena,
+        .error_info = error_info,
     };
+}
+
+attribute_cold
+void Tokenizer_Reset(Tokenizer *tokenizer) {
+    if (tokenizer->error_info != NULL) {
+        *tokenizer->error_info = (VismutErrorInfo){
+            .error = VISMUT_ERROR_OK,
+            .line = -1,
+            .column = -1,
+            .length = -1,
+        };
+    }
+    tokenizer->cursor = tokenizer->start;
+    tokenizer->token_start = tokenizer->start;
 }
 
 static int IsHexDigit(const int digit) {
@@ -66,39 +89,90 @@ static int IsDecDigit(const int digit) {
     return digit >= '0' && digit <= '9';
 }
 
+static int IsOctDigit(const int digit) {
+    return digit >= '0' && digit <= '7';
+}
+
+static int IsBinDigit(const int digit) {
+    return digit == '0' || digit == '1';
+}
+
+typedef enum {
+    NB_HEX,
+    NB_DEC,
+    NB_OCT,
+    NB_BIN,
+} NumberBase;
+
+static void Tokenizer_SetError(const Tokenizer *tokenizer, const VismutError err_code, const uint8_t *error_location,
+                               const int length, const VismutErrorDetails details) {
+    if (tokenizer->error_info == NULL) return;
+    const TextPosition error_position = FindPosition(tokenizer->start, tokenizer->limit, error_location);
+    tokenizer->error_info->error = err_code;
+    tokenizer->error_info->source = tokenizer->start;
+    tokenizer->error_info->source_length = tokenizer->limit - tokenizer->start;
+    tokenizer->error_info->module = tokenizer->source_filename;
+    tokenizer->error_info->column = (int) error_position.column;
+    tokenizer->error_info->line = (int) error_position.line;
+    tokenizer->error_info->location = error_location;
+    tokenizer->error_info->length = length;
+    tokenizer->error_info->details = details;
+}
+
 static errno_t Tokenizer_ParseNumber(Tokenizer *tokenizer, VToken *token) {
     const uint8_t *start = tokenizer->token_start;
     const uint8_t *cur = tokenizer->cursor;
     const uint8_t *limit = tokenizer->limit;
 
-    bool is_hex = false;
+    NumberBase base = NB_DEC;
     if (*start == '0' && cur < limit) {
         const uint8_t c = *cur;
         if (c == 'x' || c == 'X') {
-            is_hex = true;
+            base = NB_HEX;
             cur++;
-        } else if (c == 'b' || c == 'B') { cur++; } else if (c == 'o' || c == 'O') { cur++; }
+        } else if (c == 'b' || c == 'B') {
+            base = NB_BIN;
+            cur++;
+        } else if (c == 'o' || c == 'O') {
+            base = NB_OCT;
+            cur++;
+        }
     }
 
-    if (is_hex) {
-        while (cur < limit && IsHexDigit(*cur)) cur++;
-    } else {
-        while (cur < limit) {
-            const uint8_t c = *cur;
-            if (IsDecDigit(c)) {
-                cur++;
-                continue;
-            }
-            if (c == '.') {
-                cur++;
-                continue;
-            }
-            if (c == 'e' || c == 'E') {
-                cur++;
-                if (cur < limit && (*cur == '+' || *cur == '-')) cur++;
-                continue;
-            }
+    bool is_float = false;
+    switch (base) {
+        case NB_HEX:
+            while (cur < limit && IsHexDigit(*cur)) cur++;
             break;
+        case NB_OCT:
+            while (cur < limit && IsOctDigit(*cur)) cur++;
+            break;
+        case NB_BIN:
+            while (cur < limit && IsBinDigit(*cur)) cur++;
+            break;
+        case NB_DEC: {
+            bool has_dot = false;
+            while (cur < limit) {
+                const uint8_t c = *cur;
+                if (IsDecDigit(c)) {
+                    cur++;
+                    continue;
+                }
+                if (c == '.' && !has_dot) {
+                    cur++;
+                    has_dot = true;
+                    is_float = true;
+                    continue;
+                }
+                if (c == 'e' || c == 'E') {
+                    cur++;
+                    is_float = true;
+                    if (cur < limit && (*cur == '+' || *cur == '-')) cur++;
+                    while (cur < limit && IsDecDigit(*cur)) ++cur;
+                    break;
+                }
+                break;
+            }
         }
     }
 
@@ -107,7 +181,7 @@ static errno_t Tokenizer_ParseNumber(Tokenizer *tokenizer, VToken *token) {
     uint8_t stack_buf[64];
     uint8_t *buffer;
 
-    if (likely(length < sizeof(stack_buf))) {
+    if (likely(length < _countof(stack_buf))) {
         memcpy(stack_buf, start, length);
         stack_buf[length] = '\0';
         buffer = stack_buf;
@@ -121,37 +195,43 @@ static errno_t Tokenizer_ParseNumber(Tokenizer *tokenizer, VToken *token) {
     token->position.length = length;
 
     uint8_t *end_ptr;
-    const bool is_float = !is_hex && (memchr(buffer, '.', length) || memchr(buffer, 'e', length) || memchr(
-                                          buffer, 'E', length));
 
     if (is_float) {
         token->type = TOKEN_FLOAT_LITERAL;
         errno = 0;
         token->data.f64 = strtod((const char *) buffer, (char **) &end_ptr);
-        if (errno == ERANGE) return VISMUT_ERROR_NUMBER_OVERFLOW;
-        if (end_ptr == buffer) return VISMUT_ERROR_NUMBER_PARSE;
-    } else {
-        token->type = TOKEN_INT_LITERAL;
-        int base = 10;
-        if (buffer[0] == '0' && length > 1) {
-            const uint8_t b = buffer[1];
-            if (b == 'x' || b == 'X') base = 16;
-            else if (b == 'b' || b == 'B') base = 2;
-            else if (b == 'o' || b == 'O') base = 8;
+        if (errno == ERANGE) {
+            Tokenizer_SetError(tokenizer, VISMUT_ERROR_NUMBER_OVERFLOW, tokenizer->token_start,
+                               (int) (end_ptr - tokenizer->token_start), (VismutErrorDetails){0});
+            return VISMUT_ERROR_NUMBER_OVERFLOW;
         }
-
-        int64_t val = 0;
-        if (base == 2) val = StrToInt64Bin(buffer + 2); // Из вашего convert.h
-        else if (base == 8) val = StrToInt64Oct(buffer + 2);
-        else if (base == 16) val = StrToInt64Hex(buffer + 2);
-        else val = StrToInt64Dec(buffer);
-
-        token->data.i64 = val;
+        if (end_ptr == buffer) return VISMUT_ERROR_NUMBER_PARSE;
+        return VISMUT_ERROR_OK;
     }
+
+    int64_t val = 0;
+    switch (base) {
+        case NB_HEX:
+            val = StrToInt64Hex(buffer + 2);
+            break;
+        case NB_DEC:
+            val = StrToInt64Dec(buffer);
+            break;
+        case NB_OCT:
+            val = StrToInt64Oct(buffer + 2);
+            break;
+        case NB_BIN:
+            val = StrToInt64Bin(buffer + 2);
+            break;
+    }
+
+    token->type = TOKEN_INT_LITERAL;
+    token->data.i64 = val;
 
     return VISMUT_ERROR_OK;
 }
 
+attribute_noinline
 static errno_t Tokenizer_ParseString(Tokenizer *tokenizer, VToken *token) {
     const uint8_t quote = *tokenizer->token_start;
     const uint8_t *cur = tokenizer->cursor;
@@ -161,17 +241,18 @@ static errno_t Tokenizer_ParseString(Tokenizer *tokenizer, VToken *token) {
     const uint8_t *scan = cur;
     while (scan < limit) {
         const uint8_t c = *scan;
-        if (c == '\\') {
-            scan++;
-            if (scan >= limit) return VISMUT_ERROR_UNEXPECTED_TOKEN;
-            raw_len++;
-            scan++;
-        } else if (c == quote) {
-            break;
-        } else {
-            raw_len++;
+        if (unlikely(c == quote)) break;
+        if (unlikely(c == '\\')) {
+            if (unlikely(scan >= limit)) {
+                Tokenizer_SetError(tokenizer, VISMUT_ERROR_UNEXPECTED_SYMBOL, scan, 1,
+                                   (VismutErrorDetails){.unexpected_symbol.caught = *scan});
+                return VISMUT_ERROR_UNEXPECTED_SYMBOL;
+            }
             scan++;
         }
+
+        raw_len++;
+        scan++;
     }
     if (scan >= limit) return ENOENT;
 
@@ -180,7 +261,7 @@ static errno_t Tokenizer_ParseString(Tokenizer *tokenizer, VToken *token) {
 
     while (cur < scan) {
         uint8_t c = *cur++;
-        if (c == '\\') {
+        if (unlikely(c == '\\')) {
             c = *cur++;
             switch (c) {
                 case 'n': *dst++ = '\n';
@@ -198,7 +279,9 @@ static errno_t Tokenizer_ParseString(Tokenizer *tokenizer, VToken *token) {
                 case '\0':
                     *dst++ = '\0';
                     break;
-                default: return EILSEQ;
+                default:
+                    Tokenizer_SetError(tokenizer, EILSEQ, --cur, 1, (VismutErrorDetails){0});
+                    return EILSEQ;
             }
         } else {
             *dst++ = c;
@@ -216,10 +299,16 @@ static errno_t Tokenizer_ParseString(Tokenizer *tokenizer, VToken *token) {
 
 attribute_pure
 static VTokenType CheckKeyword3(const uint8_t *str) {
-    if (str[0] == 'i' && str[1] == '6' && str[2] == '4') return TOKEN_I64_TYPE;
-    if (str[0] == 'f' && str[1] == '6' && str[2] == '4') return TOKEN_FLOAT_TYPE;
-    if (str[0] == 's' && str[1] == 't' && str[2] == 'r') return TOKEN_STRING_TYPE;
-    return TOKEN_IDENTIFIER;
+#define MAKE_CODE3_BE(a, b, c) (((a) << 16) | ((b) << 8) | (c))
+    const int code = MAKE_CODE3_BE(str[0], str[1], str[2]);
+    switch (code) {
+        case MAKE_CODE3_BE('i', '6', '4'): return TOKEN_I64_TYPE;
+        case MAKE_CODE3_BE('f', '6', '4'): return TOKEN_FLOAT_TYPE;
+        case MAKE_CODE3_BE('s', 't', 'r'): return TOKEN_STRING_TYPE;
+        default:
+            return TOKEN_IDENTIFIER;
+    }
+#undef MAKE_CODE3_BE
 }
 
 attribute_hot
@@ -287,7 +376,7 @@ errno_t Tokenizer_Next(Tokenizer *restrict tokenizer, VToken *restrict token) {
                         curr++;
                         if (curr < limit && *curr == '/') {
                             curr++;
-                            const uint8_t *eol = memchr(curr, '\n', limit - curr);
+                            const uint8_t *eol = __builtin_memchr(curr, '\n', limit - curr);
                             curr = eol ? eol : limit;
                             continue;
                         }
@@ -305,7 +394,9 @@ errno_t Tokenizer_Next(Tokenizer *restrict tokenizer, VToken *restrict token) {
                             }
                             curr++;
                         }
-                        return VISMUT_ERROR_UNEXPECTED_TOKEN; // Unclosed
+                        Tokenizer_SetError(tokenizer, VISMUT_ERROR_UNEXPECTED_SYMBOL, curr, 1,
+                                           (VismutErrorDetails){.unexpected_symbol.caught = *curr});
+                        return VISMUT_ERROR_UNEXPECTED_SYMBOL; // Unclosed
                     MULTILINE_END:
                         // LOOP RESTART
                         continue;
@@ -430,26 +521,30 @@ errno_t Tokenizer_Next(Tokenizer *restrict tokenizer, VToken *restrict token) {
                         token->type = TOKEN_CONDITION_STATEMENT;
                         break;
                     case ':':
-                        if (next == ':') {
-                            wide = true;
-                            token->type = TOKEN_PRINT_STATEMENT;
-                        } else if (next == '>') {
-                            wide = true;
-                            token->type = TOKEN_INPUT_STATEMENT;
-                        } else token->type = TOKEN_COLON;
+                        switch (next) {
+                            case ':':
+                                wide = true;
+                                token->type = TOKEN_PRINT_STATEMENT;
+                                break;
+                            case '>':
+                                wide = true;
+                                token->type = TOKEN_INPUT_STATEMENT;
+                                break;
+                            default:
+                                token->type = TOKEN_COLON;
+                                break;
+                        }
                         break;
-
                     default:
-                        return VISMUT_ERROR_UNKNOWN_CHAR;
+                        Tokenizer_SetError(tokenizer, VISMUT_ERROR_UNKNOWN_SYMBOL, tokenizer->token_start, 1,
+                                           (VismutErrorDetails){.unknown_symbol.caught = *tokenizer->token_start});
+                        return VISMUT_ERROR_UNKNOWN_SYMBOL;
                 }
-
-                if (wide) {
-                    curr++;
-                    token->position.length = 2;
-                } else {
-                    token->position.length = 1;
+                token->position.length = 1;
+                if (unlikely(wide)) {
+                    ++curr;
+                    ++token->position.length;
                 }
-
                 tokenizer->cursor = curr;
                 return VISMUT_ERROR_OK;
             }

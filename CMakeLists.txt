@@ -43,8 +43,6 @@ add_executable(Vismut main.c
         Vismut/io/reader/reader.c
         Vismut/core/Vismut.h
         Vismut/core/errors/errors.h
-        Vismut/utils/unicode_console.h
-        Vismut/utils/unicode_console.c
         Vismut/core/errors/errors.c
         Vismut/core/tokenizer/tokenizer.h
         Vismut/core/tokenizer/tokenizer.c
@@ -76,10 +74,14 @@ add_executable(Vismut main.c
         Vismut/core/ast/ast_typing.c
         Vismut/core/ast/ast_optimize.c
         Vismut/core/ast/ast_optimize.h
-        Vismut/core/gen/codegen.c
-        Vismut/core/gen/codegen.h
-        Vismut/core/gen/run.h
-        Vismut/core/gen/run.c)
+        Vismut/core/codegen/codegen.c
+        Vismut/core/codegen/codegen.h
+        Vismut/core/codegen/run.h
+        Vismut/core/codegen/run.c
+        Vismut/utils/find_position.h
+        Vismut/utils/find_position.c
+        Vismut/utils/module_name.h
+        Vismut/utils/module_name.c)
 
 # Разделение флагов по конфигурациям
 target_compile_options(Vismut PRIVATE

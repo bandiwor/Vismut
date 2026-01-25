@@ -1,4 +1,5 @@
 #include "murmur3.h"
+
 #include <string.h>
 
 // Константы MurmurHash3
@@ -12,7 +13,7 @@
 
 // Основная функция MurmurHash3 32-бит
 uint32_t murmurhash3_32(const void *key, const size_t len, const uint32_t seed) {
-    const uint8_t *data = (const uint8_t *) key;
+    const uint8_t *data = key;
     const int n_blocks = (int) (len / 4);
 
     uint32_t h1 = seed;
@@ -31,7 +32,7 @@ uint32_t murmurhash3_32(const void *key, const size_t len, const uint32_t seed) 
     }
 
     // Обработка оставшихся байт
-    const uint8_t *tail = (const uint8_t *) (data + n_blocks * 4);
+    const uint8_t *tail = data + n_blocks * 4;
     uint32_t k1 = 0;
 
     switch (len & 3) {
@@ -59,7 +60,7 @@ uint32_t murmurhash3_32(const void *key, const size_t len, const uint32_t seed) 
 // Оптимизированная версия для C-строк
 uint32_t murmurhash3_string(const uint8_t *str, const uint32_t seed) {
     if (!str) return 0;
-    return murmurhash3_32(str, strlen(str), seed);
+    return murmurhash3_32(str, strlen((const char *) str), seed);
 }
 
 // Хеширование 64-битного целого
@@ -99,12 +100,11 @@ uint32_t murmurhash3_int64(const int64_t value, const uint32_t seed) {
 
 // Хеширование double
 uint32_t murmurhash3_double(const double value, const uint32_t seed) {
-    union {
+    const union {
         double d;
         uint64_t i;
-    } converter;
+    } converter = {.d = value};
 
-    converter.d = value;
     return murmurhash3_int64((int64_t) converter.i, seed);
 }
 

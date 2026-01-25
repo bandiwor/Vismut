@@ -10,11 +10,11 @@ static int ansi_supported = 0;
 static HANDLE hConsole = NULL;
 static DWORD originalMode = 0;
 
-int ansi_supports_color(void) {
+int ansi_supports_color(FILE *file) {
 #ifdef _WIN32
     return color_enabled;
 #else
-    return color_enabled && isatty(fileno(stdout));
+    return color_enabled && isatty(fileno(file));
 #endif
 }
 
@@ -22,65 +22,53 @@ void ansi_enable_color(const int enable) {
     color_enabled = enable;
 }
 
-void ansi_set_color(const char *color) {
-    if (ansi_supports_color()) {
-        fprintf(stdout, "%s", color);
+void ansi_set_color(FILE *file, const char *color) {
+    if (ansi_supports_color(file)) {
+        fprintf(file, "%s", color);
     }
 }
 
-void ansi_set_bg_color(const char *color) {
-    if (ansi_supports_color()) {
-        fprintf(stdout, "%s", color);
+void ansi_reset(FILE *file) {
+    if (ansi_supports_color(file)) {
+        fprintf(file, ANSI_RESET);
     }
 }
 
-void ansi_set_style(const char *style) {
-    if (ansi_supports_color()) {
-        fprintf(stdout, "%s", style);
-    }
-}
-
-void ansi_reset(void) {
-    if (ansi_supports_color()) {
-        fprintf(stdout, ANSI_COLOR_RESET);
-    }
-}
-
-void ansi_print_color(const char *color, const char *text) {
-    if (ansi_supports_color()) {
-        fprintf(stdout, "%s%s" ANSI_COLOR_RESET, color, text);
+void ansi_print_with_style(FILE *file, const char *color, const char *text) {
+    if (ansi_supports_color(file)) {
+        fprintf(file, "%s%s" ANSI_RESET, color, text);
     } else {
-        fprintf(stdout, "%s", text);
+        fprintf(file, "%s", text);
     }
 }
 
-void ansi_print_bg(const char *bg_color, const char *text) {
-    if (ansi_supports_color()) {
-        fprintf(stdout, "%s%s" ANSI_COLOR_RESET, bg_color, text);
+void ansi_print_with_style_formatted(FILE *file, const char *color, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+
+    if (ansi_supports_color(file)) {
+        fprintf(file, "%s", color);
+        vfprintf(file, format, args);
+        fprintf(file, ANSI_RESET);
     } else {
-        fprintf(stdout, "%s", text);
+        vfprintf(file, format, args);
     }
+
+    va_end(args);
 }
 
-void ansi_print_styled(const char *color, const char *bg_color,
-                       const char *style, const char *text) {
-    if (ansi_supports_color()) {
-        if (style) fprintf(stdout, "%s", style);
-        if (bg_color) fprintf(stdout, "%s", bg_color);
-        if (color) fprintf(stdout, "%s", color);
-        fprintf(stdout, "%s" ANSI_COLOR_RESET, text);
-    } else {
-        fprintf(stdout, "%s", text);
-    }
-}
-
-int win_ansi_init(void) {
+int win_ansi_init(FILE *file) {
     if (is_initialized) {
         return ansi_supported;
     }
 
 #ifdef _WIN32
-    hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (file != stdout && file != stderr) {
+        is_initialized = 1;
+        return ansi_supported = 0;
+    }
+
+    hConsole = GetStdHandle(file == stdout ? STD_OUTPUT_HANDLE : STD_ERROR_HANDLE);
     if (hConsole == INVALID_HANDLE_VALUE) {
         is_initialized = 1;
         ansi_supported = 0;
@@ -94,15 +82,12 @@ int win_ansi_init(void) {
     }
 
     DWORD newMode = originalMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-
     if (SetConsoleMode(hConsole, newMode)) {
-        ansi_supported = 1;
-    } else {
-        // Если не удалось, пробуем альтернативный метод
-        // Для Windows 10 до Creators Update (версия 1703)
-        newMode = originalMode | 0x0004; // ENABLE_VIRTUAL_TERMINAL_PROCESSING
-        ansi_supported = SetConsoleMode(hConsole, newMode);
+        return 1;
     }
+
+    newMode = ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    return SetConsoleMode(hConsole, newMode);
 #else
     // На Unix-подобных системах ANSI коды работают по умолчанию
     ansi_supported = true;

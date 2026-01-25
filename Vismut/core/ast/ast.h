@@ -9,6 +9,26 @@
 #include "scope.h"
 #include <stdbool.h>
 
+typedef struct FunctionParamNode {
+    struct FunctionParamNode *next;
+    const uint8_t *name;
+    VValueType type;
+} FunctionParamNode;
+
+typedef struct {
+    const uint8_t **param_names;
+    VValueType *param_types;
+    size_t params_count;
+} FunctionParams;
+
+typedef struct {
+    FunctionParams params;
+    const uint8_t *function_name;
+    uint32_t function_name_hash;
+    VValueType return_type;
+    int flags;
+} FunctionSignature;
+
 typedef struct {
     ASTNodeType type;
     Position pos;
@@ -28,6 +48,19 @@ typedef struct {
             VValueType init_value_type;
             struct ASTNode *init_value;
         } var_decl;
+
+        struct {
+            FunctionSignature *signature;
+            const struct ASTNode *arguments;
+            VValueType expr_type;
+            size_t arguments_count;
+        } function_call;
+
+        struct {
+            FunctionSignature *signature;
+            const struct ASTNode *body;
+            Scope *scope;
+        } function_decl;
 
         struct {
             struct ASTNode *operand;
@@ -86,10 +119,17 @@ typedef struct {
         struct {
             struct ASTNode *expressions;
         } print_stmt;
+
+        struct {
+            struct ASTNode *variable;
+        } input_stmt;
     };
 } ASTNode;
 
-void ASTNode_Print(const ASTNode *);
+void ASTNode_Print(const ASTNode *, FILE *);
+
+attribute_pure
+FunctionSignature *FindFunctionSignature(const ASTNode *module, const uint8_t *function_name);
 
 ASTNode *CreateLiteralNode(Arena *arena, Position pos, VValue value);
 
@@ -103,6 +143,8 @@ ASTNode *CreateUnaryNode(Arena *arena, Position pos, const ASTNode *operand, AST
 
 ASTNode *CreateIfStatementNode(Arena *arena, Position pos, const ASTNode *condition,
                                const ASTNode *then_block, const ASTNode *else_block);
+
+ASTNode *CreateWhileStatementNode(Arena *arena, Position pos, const ASTNode *condition, const ASTNode *body);
 
 ASTNode *CreateVarDeclarationNode(Arena *arena, Position pos, const uint8_t *var_name,
                                   VValueType var_type, const ASTNode *init_value);
@@ -118,5 +160,8 @@ ASTNode *CreateModuleNode(Arena *arena, const uint8_t *module_name, Scope *scope
 ASTNode *CreateBlockNode(Arena *arena, Position pos, ASTNode *statements, Scope *scope);
 
 ASTNode *CreatePrintStatementNode(Arena *arena, Position pos, ASTNode *expressions);
+
+ASTNode *CreateFunctionDeclarationNode(Arena *arena, Position pos, FunctionSignature *signature, ASTNode *body,
+                                       Scope *scope);
 
 #endif //VISMUT_AST_H

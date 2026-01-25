@@ -1,5 +1,8 @@
 #include "ast_analyze.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "ast_typing.h"
 #include "../types.h"
 #include "../errors/errors.h"
@@ -11,11 +14,11 @@ typedef struct {
 } ASTTypeAnalyzerContext;
 
 #define SAFE_ANALYZE(node_ptr, out_type_ptr) \
-    do { \
+    START_BLOCK_WRAPPER \
         if (unlikely((err = ASTTypeAnalyzeNode(context, (ASTNode *)node_ptr, out_type_ptr)) != VISMUT_ERROR_OK)) { \
             return err;\
         }\
-    } while (0)
+    END_BLOCK_WRAPPER
 
 attribute_pure
 static bool IsNodePure(const ASTNode *node) {
@@ -48,6 +51,14 @@ static errno_t ASTTypeAnalyzeNode(ASTTypeAnalyzerContext *context, ASTNode *node
             node->binary_op.is_pure = operands_is_pure && node->binary_op.is_pure;
 
             if (node->binary_op.op == AST_BINARY_ASSIGN) {
+                if (((const ASTNode *) node->binary_op.left)->type != AST_VAR_REF) {
+                    return VISMUT_ERROR_ASSIGN_NOT_TO_VAR;
+                }
+
+                if (left == right) {
+                    *value_type = node->binary_op.expr_type = left;
+                    return VISMUT_ERROR_OK;
+                }
                 const bool is_allowed_cast = IsCastAllowed(right, left, false);
                 if (!is_allowed_cast) {
                     return VISMUT_ERROR_CAST_IS_NOT_ALLOWED;
@@ -69,9 +80,9 @@ static errno_t ASTTypeAnalyzeNode(ASTTypeAnalyzerContext *context, ASTNode *node
             const VValueType common_type = FindCommonType(left, right);
             if (unlikely(common_type == VALUE_UNKNOWN)) {
                 printf("Error in node:\n");
-                ASTNode_Print(node);
+                ASTNode_Print(node, stdout);
                 printf("Operation: '<%s> %s <%s>' is unsupported\n", VValueType_String(left),
-                        ASTBinaryType_String(node->binary_op.op), VValueType_String(right));
+                       ASTBinaryType_String(node->binary_op.op), VValueType_String(right));
                 return VISMUT_ERROR_UNSUPPORTED_OPERATION;
             }
 
@@ -91,9 +102,9 @@ static errno_t ASTTypeAnalyzeNode(ASTTypeAnalyzerContext *context, ASTNode *node
             const VValueType result_with_casting = GetBinaryOpResultType(node->binary_op.op, common_type, common_type);
             if (unlikely(result_with_casting == VALUE_UNKNOWN)) {
                 printf("Error in node:\n");
-                ASTNode_Print(node);
+                ASTNode_Print(node, stdout);
                 printf("Operation: '<%s> %s <%s>' is unsupported\n", VValueType_String(common_type),
-                        ASTBinaryType_String(node->binary_op.op), VValueType_String(common_type));
+                       ASTBinaryType_String(node->binary_op.op), VValueType_String(common_type));
                 return VISMUT_ERROR_UNSUPPORTED_OPERATION;
             }
 
@@ -110,9 +121,9 @@ static errno_t ASTTypeAnalyzeNode(ASTTypeAnalyzerContext *context, ASTNode *node
             const VValueType result = GetUnaryOpResultType(node->unary_op.op, operand);
             if (result == VALUE_UNKNOWN) {
                 printf("Error in node:\n");
-                ASTNode_Print(node);
+                ASTNode_Print(node, stdout);
                 printf("'<%s>' for '<%s>' is unsupported\n", ASTUnaryType_String(node->unary_op.op),
-                        VValueType_String(operand));
+                       VValueType_String(operand));
                 return VISMUT_ERROR_UNSUPPORTED_OPERATION;
             }
 
@@ -187,15 +198,88 @@ static errno_t ASTTypeAnalyzeNode(ASTTypeAnalyzerContext *context, ASTNode *node
                 node->var_decl.var_type = init_value;
             } else if (node->var_decl.var_type != init_value) {
                 printf("Error in node:");
-                ASTNode_Print(node);
+                ASTNode_Print(node, stdout);
                 printf("Type %s != %s\n", VValueType_String(node->var_decl.var_type),
-                        VValueType_String(init_value));
+                       VValueType_String(init_value));
                 return VISMUT_ERROR_TYPE_IS_INCOMPATIBLE;
             }
 
             if ((err = Scope_Declare(context->current_scope, node->var_decl.var_name, init_value, 0)) !=
                 VISMUT_ERROR_OK) {
                 return err;
+            }
+
+            return VISMUT_ERROR_OK;
+        }
+        case AST_FUNCTION_DECL: {
+            *value_type = VALUE_VOID;
+
+            Scope *function_scope = node->function_decl.scope;
+            for (size_t i = 0; i < node->function_decl.signature->params.params_count; ++i) {
+                const uint8_t *param_name = node->function_decl.signature->params.param_names[i];
+                const VValueType param_type = node->function_decl.signature->params.param_types[i];
+                RISKY_EXPRESSION_SAFE(
+                    Scope_Declare(function_scope, param_name, param_type, 0),
+                    err
+                );
+            }
+
+            if (((const ASTNode *) node->function_decl.body)->type != AST_BLOCK) {
+                VValueType declaration_type = node->function_decl.signature->return_type;
+                if (declaration_type == VALUE_VOID) {
+                    return VISMUT_ERROR_VOID_FOR_EXPRESSION_FUNCTION;
+                }
+
+                Scope *old_scope = context->current_scope;
+                context->current_scope = function_scope;
+                VValueType return_type;
+                SAFE_ANALYZE(node->function_decl.body, &return_type);
+                context->current_scope = old_scope;
+
+                declaration_type = (declaration_type == VALUE_AUTO) ? return_type : declaration_type;
+                if (declaration_type == return_type) {
+                    node->function_decl.signature->return_type = declaration_type;
+                    return VISMUT_ERROR_OK;
+                }
+                if (!IsCastAllowed(return_type, declaration_type, false)) {
+                    return VISMUT_ERROR_CAST_IS_NOT_ALLOWED;
+                }
+                ASTNode *body = (ASTNode *) node->function_decl.body;
+                node->function_decl.body = (struct ASTNode *) CreateTypeCastNode(
+                    context->arena, body->pos, body, declaration_type);
+
+                return VISMUT_ERROR_OK;
+            }
+
+            Scope *old_scope = context->current_scope;
+            context->current_scope = function_scope;
+            VValueType body;
+            SAFE_ANALYZE(node->function_decl.body, &body);
+            context->current_scope = old_scope;
+
+            return VISMUT_ERROR_OK;
+        }
+        case AST_FUNCTION_CALL: {
+            *value_type = node->function_call.expr_type = node->function_call.signature->return_type;
+            if (node->function_call.arguments_count != node->function_call.signature->params.params_count) {
+                return VISMUT_ERROR_INVALID_ARGUMENTS_COUNT;
+            }
+            if (node->function_call.arguments_count == 0) {
+                return VISMUT_ERROR_OK;
+            }
+
+            ASTNode *arguments = (ASTNode *) node->function_call.arguments;
+            VValueType *param_type = node->function_call.signature->params.param_types;
+            for (
+                ASTNode *current = arguments; current != NULL; current = (ASTNode *) current->next_node, ++param_type
+            ) {
+                const VValueType current_param = *param_type;
+                VValueType current_type;
+                SAFE_ANALYZE(current, &current_type);
+
+                if (current_param != current_type) {
+                    return VISMUT_ERROR_FUNCTION_ALREADY_DEFINED;
+                }
             }
 
             return VISMUT_ERROR_OK;
@@ -208,6 +292,13 @@ static errno_t ASTTypeAnalyzeNode(ASTTypeAnalyzerContext *context, ASTNode *node
             if (node->if_stmt.else_block != NULL) {
                 SAFE_ANALYZE(node->if_stmt.else_block, &else_block);
             }
+            return VISMUT_ERROR_OK;
+        }
+        case AST_WHILE_STMT: {
+            *value_type = VALUE_VOID;
+            VValueType condition, body;
+            SAFE_ANALYZE(node->while_stmt.condition, &condition);
+            SAFE_ANALYZE(node->while_stmt.body, &body);
             return VISMUT_ERROR_OK;
         }
         case AST_BLOCK: {
@@ -228,6 +319,13 @@ static errno_t ASTTypeAnalyzeNode(ASTTypeAnalyzerContext *context, ASTNode *node
         }
         case AST_MODULE: {
             *value_type = VALUE_VOID;
+            ASTNode *function_statement = (ASTNode *) node->module.functions;
+            while (function_statement != NULL) {
+                VValueType statement_type;
+                SAFE_ANALYZE(function_statement, &statement_type);
+                function_statement = (ASTNode *) function_statement->next_node;
+            }
+
             ASTNode *current_statement = (ASTNode *) node->module.statements;
             while (current_statement != NULL) {
                 VValueType statement_type;

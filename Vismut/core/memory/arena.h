@@ -8,7 +8,7 @@
 
 #define ARENA_BLOCK_SIZE_DEFAULT 4096
 
-typedef struct tag_ArenaBlock {
+typedef struct tag_ArenaBlock  {
     void *memory;
     size_t size;
     size_t used;

@@ -10,10 +10,11 @@
 
 typedef struct {
     FILE *output;
+    const uint8_t *module_name;
 } CodeGenContext;
 
 attribute_pure
-CodeGenContext CodeGen_CreateContext(FILE *output);
+CodeGenContext CodeGen_CreateContext(FILE *output, const uint8_t *module_name);
 
 void CodeGen_GenerateFromAST(CodeGenContext ctx, const ASTNode *module);
 

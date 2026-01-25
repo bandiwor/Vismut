@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "../errors/errors.h"
@@ -108,7 +109,7 @@ errno_t Scope_Declare(Scope *scope, const uint8_t *name,
     size_t index = slot_index(scope, hash);
 
     for (const Symbol *sym = scope->slots[index].head; sym; sym = sym->next) {
-        if (sym->hash == hash && strcmp(sym->name, name) == 0) {
+        if (sym->hash == hash && __builtin_strcmp((const char *) sym->name, (const char *) name) == 0) {
             return VISMUT_ERROR_SYMBOL_ALREADY_DEFINED;
         }
     }

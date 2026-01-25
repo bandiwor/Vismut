@@ -1,9 +1,7 @@
 #include "run.h"
 
 #include <stdlib.h>
-#include <string.h>
-
-#include "../../io/reader/reader.h"
+#include <stdio.h>
 
 void Run(const char *filename, const char *exe_name) {
     char command_buffer[512];
